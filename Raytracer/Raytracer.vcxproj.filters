@@ -42,11 +42,11 @@
     <None Include="vert.glsl">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="WaterSim.cl">
-      <Filter>OpenCL</Filter>
-    </None>
     <None Include="rand.cl">
       <Filter>OpenCL</Filter>
+    </None>
+    <None Include="WaterSim.cl">
+      <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
