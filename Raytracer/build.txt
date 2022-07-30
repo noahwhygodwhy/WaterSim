@@ -1,0 +1,1 @@
+clang -c -cl-std=clc++ -target spir64 -O0 -emit-llvm -o renderer.bc renderer.cl sphere.cl triangle.cl sharedStructs.cl shape.cl rand.cl helpers.cl cookTorance.cl
