@@ -38,24 +38,8 @@ void frameBufferSizeCallback(GLFWwindow* window, uint64_t width, uint64_t height
 	glViewport(0, 0, GLsizei(width), GLsizei(height));
 }
 
-void saveImage(string filepath, GLFWwindow* w) {
 
-	string outDir = "out/"+saveFileDirectory+"/";
-	int width, height;
-	glfwGetFramebufferSize(w, &width, &height);
-	GLsizei nrChannels = 4;
-	GLsizei stride = nrChannels * width;
-	stride += (stride % 4) ? (4 - stride % 4) : 0;
-	GLsizei bufferSize = stride * height;
-	std::vector<float> buffer(bufferSize);
-	glPixelStorei(GL_PACK_ALIGNMENT, 4);
-	glReadBuffer(GL_FRONT);
-	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
-	stbi_flip_vertically_on_write(true);
-	stbi_write_png((outDir + filepath).c_str(), width, height, nrChannels, buffer.data(), stride);
-}
-void GLAPIENTRY
-MessageCallback(GLenum source,
+void GLAPIENTRY MessageCallback(GLenum source,
 	GLenum type,
 	GLuint id,
 	GLenum severity,
