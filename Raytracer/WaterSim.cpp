@@ -1,5 +1,6 @@
 #include "WaterSim.hpp"
 #include "clTypeDefs.hpp"
+#include <glm/gtx/normal.hpp>
 
 typedef float4 fvec4;
 typedef float3 fvec3;
@@ -13,12 +14,13 @@ using namespace glm;
 
 
 
+uint32_t frameX = 1000;
+uint32_t frameY = 1000;
 
-constexpr uint32_t bathX = 400;
-constexpr uint32_t bathY = 400;
 
-uint32_t frameX = 400;
-uint32_t frameY = 400;
+vec3 boxSize = vec3(10.0f);
+float ballRad = 0.05f;
+
 double frameRatio = double(frameX) / double(frameY);
 
 
@@ -30,11 +32,14 @@ double deltaTime = 0.0f;	// Time between current frame and last frame
 double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
-
 constexpr double bias = 1e-4;
+constexpr uint32_t MAX_BALLS = 2000000;
+
 
 
 void frameBufferSizeCallback(GLFWwindow* window, uint64_t width, uint64_t height) {
+	frameX = width;
+	frameY = height;
 	glViewport(0, 0, GLsizei(width), GLsizei(height));
 }
 
@@ -96,29 +101,12 @@ void initOpenCL(cl_context& clContext, cl_device_id& device, GLFWwindow* window)
 	clGetDeviceInfo(devices[0], CL_DEVICE_TYPE, sizeof(type), &type, NULL);
 	device = devices[0];
 
-	printf("device type: %ui\n", type);
+	printf("device type: %lu\n", type);
 
 
 
 	char* ui;
-	//size_t valueSize;
-	//clGetDeviceInfo(device, CL_DEVICE_VERSION, sizeof(ui), &ui, NULL);
-	//printf("%s\n", ui);
-	//clGetDeviceInfo(device, CL_DEVICE_VERSION, 0, NULL, &valueSize);
-	//printf("%s\n", ui);
 	ui = (char*)malloc(1024);
-	clGetDeviceInfo(device, CL_DEVICE_VERSION, 1024, ui, NULL);
-	printf("%s\n", ui);
-	clGetDeviceInfo(device, CL_DEVICE_VENDOR, 1024, ui, NULL);
-	printf("%s\n", ui);
-	clGetDeviceInfo(device, CL_DRIVER_VERSION, 1024, ui, NULL);
-	printf("%s\n", ui);
-	clGetDeviceInfo(device, CL_DEVICE_PROFILE, 1024, ui, NULL);
-	printf("%s\n", ui);
-	clGetDeviceInfo(device, CL_DEVICE_PLATFORM, 1024, ui, NULL);
-	printf("%i\n", ui);
-	clGetDeviceInfo(device, CL_DEVICE_NAME, 1024, ui, NULL);
-	printf("%s\n", ui);
 
 
 	printf(" %d.%d Hardware version: %s\n", 1, 1, ui);
@@ -160,16 +148,19 @@ int main()
 	}
 	frameBufferSizeCallback(window, frameX, frameY);
 
+
+	glEnable(GL_DEPTH_TEST);
+
 	glEnable(GL_DEBUG_OUTPUT);
+
+
+	glEnable(GL_CULL_FACE);
+
 	glDebugMessageCallback(MessageCallback, 0);
 
 	cl_int status = 0;
 	cl_context clContext;
 	cl_device_id device;
-	//initOpenGL(window);
-	
-
-
 	initOpenCL(clContext, device, window);
 
 
@@ -182,51 +173,54 @@ int main()
 	cl_command_queue cmdQueue = clCreateCommandQueueWithProperties(clContext, device, qProperties, &status);
 	printf("cmdqueue status: %i\n", status);
 
-	cl_mem bathEven = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(uint32_t) * bathX * bathY, NULL, &status);
-	printf("create bathEven buffer status: %i\n", status);
-	cl_mem bathOdd = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(uint32_t) * bathX * bathY, NULL, &status);
-	printf("create bathood buffer status: %i\n", status);
-	cl_mem bathTemp = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(float) * bathX * bathY, NULL, &status);
-	printf("create bathTemp buffer status: %i\n", status);
-	//cl_mem clFrameCount = clCreateBuffer(clContext, CL_MEM_READ_ONLY, sizeof(uint32_t), NULL, &status);
-	//printf("create clframecount buffer status: %i\n", status);
-	
+	cl_mem clVelocities = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(fvec3) * MAX_BALLS, NULL, &status);
+
+//shared context buffer
+
+
+	fvec3* initialBathPositions = new fvec3[MAX_BALLS](fvec3(0));
+	fvec3* initialBathVelocities = new fvec3[MAX_BALLS](fvec3(0));
 
 
 
 
-//Set up opengl buffer to be drawn to by opencl
-	GLuint frameFBO;
-	glGenFramebuffers(1, &frameFBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, frameFBO);
-
-	unsigned int frameTexture;
-	glGenTextures(1, &frameTexture);
-	glBindTexture(GL_TEXTURE_2D, frameTexture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, bathX, bathY, 0, GL_RGBA, GL_FLOAT, NULL);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameTexture, 0);
-
-	printf("frame texture: %i\n", frameTexture);
-	printf("frameFBO: %i\n", frameFBO);
 
 
 
-	cl_mem clFrameTexture = clCreateFromGLTexture(clContext, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, frameTexture, &status);
-	printf("create buffer 5 status: %i\n", status);
-	status = clEnqueueAcquireGLObjects(cmdQueue, 1, &clFrameTexture, 0, NULL, NULL);
+	ivec3 counts = boxSize / (ballRad * 2);
+
+	printf("%i, %i, %i\n", counts.x, counts.y, counts.z);
+
+	uint64_t i = 0;
+	for (int x = 0; x < counts.x/2; x++) {
+		for (int y = 0; y < (counts.y*3)/4; y++) {
+			for (int z = 0; z < counts.z;  z++) {
+				if (i < MAX_BALLS) {
+
+					initialBathPositions[i] = (fvec3(x, y, z) * fvec3(ballRad*2.0f));
+					initialBathVelocities[i] = fvec3(0.0f);
+					i++;
+				}
+			}
+		}
+	}
+
+	GLuint ballVBO, ballVAO;
+	glGenVertexArrays(1, &ballVAO);
+	glBindVertexArray(ballVAO);
+	glGenBuffers(1, &ballVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(fvec3) * MAX_BALLS, initialBathPositions, GL_DYNAMIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(fvec3), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	cl_mem clPositions = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, ballVBO, &status);
+	printf("positions clmem from VBO: %i\n", status);
+	status = clEnqueueAcquireGLObjects(cmdQueue, 1, &clPositions, 0, NULL, NULL);
 	printf("aquire gl object status: %i\n", status);
-
-
-	//printf("cltesttexture status: %i\n", status);
-
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 
 //read in opencl program and compile
@@ -264,96 +258,141 @@ int main()
 //create the kernels and set memory arguments
 	cl_kernel waterSimKernel = clCreateKernel(program, "watersim", &status);
 	printf("kernal status: %i\n", status);
-	cl_kernel renderKernel = clCreateKernel(program, "render", &status);
-	printf("kernal status: %i\n", status);
 
 
 
-	status = clSetKernelArg(renderKernel, 1, sizeof(cl_mem), &clFrameTexture);
+
+	status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &clPositions);
+	printf("set arg 0 status: %i\n", status);
+	status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &clVelocities);
 	printf("set arg 1 status: %i\n", status);
+
+
 	
 
-
-
-
-
-
-
-
-//Documentation todo:
-	//v this is the number of items to do, so like framex and framey?
-	//size_t globalWorkSize[3] = { sizes[0], sizes[1], sizes[2]};
-
-	//values in this must be divisible by values in local work size
-	//cannot be values larger than an unsigned in contained in a number of bits queried by CL_DEVICE_ADDRESS_BITS
-	size_t globalWorkSize[3] = { bathX, bathY, 1 };
-
-	//this is describing how wide the processing can be, so we set it to max the gpu can do
-	//size_t localWorkSize[3] = { sizes[0], sizes[1], sizes[2]};
-
-
-	//must be a 3d array volume < CL_DEVICE_MAX_WORK_GROUP_SIZE (in our case 1024)
-	//and each side must be less than the coresponding size in CL_DEVICE_MAX_WORK_ITEM_SIZES (1024x1024x64)
+	size_t globalWorkSize[3] = { MAX_BALLS, 1, 1 };
 	size_t localWorkSize[3] = { NULL, NULL, NULL };
 
-
-
-
-//opengl shader
-	Shader shader("vert.glsl", "frag.glsl");
-	shader.use();
-
-
-//set up initial random buffer state cause gpu random is hard
-	/*mt19937_64 numGen;
-	randomBuffer = new uint64_t[frameX * frameY]();
-	for (size_t i = 0; i < frameX * frameY; i++) {
-		randomBuffer[i] = numGen();
-	}*/
-	
-
+	Shader boxShader("boxVert.glsl", "boxFrag.glsl");
+	Shader waterShader("waterVert.glsl", "waterFrag.glsl");
 
 
 	uint32_t frameCounter = 0;
 	float frameTimes[30](0);
 	int lastSecondFrameCount = -1;
 
-	//uint32_t fps = 12;
-
-	//cl_event* waitAfterWrites = new cl_event[5];
-
-	
-	uint32_t* initialBathState = new uint32_t[bathX * bathY]();
 
 
-	for (uint64_t i = 0; i < bathX * bathY; i++) {
-		if ((i % bathX) < (bathX/2)) {
-			initialBathState[i] = 1;
-		}
-		else {
-			initialBathState[i] = 0;
-		}
-	}
-
-	printf("%i\n", initialBathState[0]);
-
-	//status = clEnqueueWriteBuffer(cmdQueue, bathOdd, CL_TRUE, 0, sizeof(uint32_t)*bathX*bathY, initialBathState, 0, NULL, NULL);
-	status = clEnqueueWriteBuffer(cmdQueue, bathEven, CL_TRUE, 0, sizeof(uint32_t) * bathX * bathY, initialBathState, 0, NULL, NULL);
+	status = clEnqueueWriteBuffer(cmdQueue, clPositions, CL_TRUE, 0, sizeof(fvec3) * MAX_BALLS, initialBathPositions, 0, NULL, NULL);
+	printf("write 0 status: %i\n", status);
+	status = clEnqueueWriteBuffer(cmdQueue, clVelocities, CL_TRUE, 0, sizeof(fvec3) * MAX_BALLS, initialBathVelocities, 0, NULL, NULL);
 	printf("write 0 status: %i\n", status);
 
+	
+
+	fvec3 finalBoxData[72] = {
+		vec3(0.000000, 1.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
+		vec3(0.000000, 0.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
+		vec3(1.000000, 0.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
+
+		vec3(0.000000, 1.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
+		vec3(1.000000, 0.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
+		vec3(1.000000, 1.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
+
+		vec3(0.000000, 1.000000, 1.000000), vec3(1.000000, 0.000000, 0.000000),
+		vec3(0.000000, 0.000000, 0.000000), vec3(1.000000, 0.000000, 0.000000),
+		vec3(0.000000, 1.000000, 0.000000), vec3(1.000000, 0.000000, 0.000000),
+
+		vec3(0.000000, 1.000000, 1.000000), vec3(1.000000, 0.000000, 0.000000),
+		vec3(0.000000, 0.000000, 1.000000), vec3(1.000000, 0.000000, 0.000000),
+		vec3(0.000000, 0.000000, 0.000000), vec3(1.000000, 0.000000, 0.000000),
+
+		vec3(1.000000, 1.000000, 1.000000), vec3(0.000000, 0.000000, -1.000000),
+		vec3(0.000000, 0.000000, 1.000000), vec3(0.000000, 0.000000, -1.000000),
+		vec3(0.000000, 1.000000, 1.000000), vec3(0.000000, 0.000000, -1.000000),
+
+		vec3(1.000000, 1.000000, 1.000000), vec3(0.000000, 0.000000, -1.000000),
+		vec3(1.000000, 0.000000, 1.000000), vec3(0.000000, 0.000000, -1.000000),
+		vec3(0.000000, 0.000000, 1.000000), vec3(0.000000, 0.000000, -1.000000),
+
+		vec3(1.000000, 1.000000, 0.000000), vec3(-1.000000, 0.000000, 0.000000),
+		vec3(1.000000, 0.000000, 1.000000), vec3(-1.000000, 0.000000, 0.000000),
+		vec3(1.000000, 1.000000, 1.000000), vec3(-1.000000, 0.000000, 0.000000),
+
+		vec3(1.000000, 1.000000, 0.000000), vec3(-1.000000, 0.000000, 0.000000),
+		vec3(1.000000, 0.000000, 0.000000), vec3(-1.000000, 0.000000, 0.000000),
+		vec3(1.000000, 0.000000, 1.000000), vec3(-1.000000, 0.000000, 0.000000),
+
+		vec3(0.000000, 0.000000, 1.000000), vec3(0.000000, 1.000000, 0.000000),
+		vec3(1.000000, 0.000000, 0.000000), vec3(0.000000, 1.000000, 0.000000),
+		vec3(0.000000, 0.000000, 0.000000), vec3(0.000000, 1.000000, 0.000000),
+
+		vec3(0.000000, 0.000000, 1.000000), vec3(0.000000, 1.000000, 0.000000),
+		vec3(1.000000, 0.000000, 1.000000), vec3(0.000000, 1.000000, 0.000000),
+		vec3(1.000000, 0.000000, 0.000000), vec3(0.000000, 1.000000, 0.000000),
+
+		vec3(0.000000, 1.000000, 1.000000), vec3(0.000000, -1.000000, 0.000000),
+		vec3(0.000000, 1.000000, 0.000000), vec3(0.000000, -1.000000, 0.000000),
+		vec3(1.000000, 1.000000, 0.000000), vec3(0.000000, -1.000000, 0.000000),
+
+		vec3(0.000000, 1.000000, 1.000000), vec3(0.000000, -1.000000, 0.000000),
+		vec3(1.000000, 1.000000, 0.000000), vec3(0.000000, -1.000000, 0.000000),
+		vec3(1.000000, 1.000000, 1.000000), vec3(0.000000, -1.000000, 0.000000)
+	};
+
+	for (int i = 0; i < 72; i+=2) {
+		finalBoxData[i] = finalBoxData[i] * boxSize;
+	}
 
 
-	//cl_event* otherDataEvent = new cl_event;
-	//cl_event* waitAfterProcessing = new cl_event;
 
 
 
+	GLuint boxVBO, boxVAO;
+
+
+	//printf("about to pause\n");
+	//cin.get();
+	//printf("paused\n");
+
+	glGenBuffers(1, &boxVBO);
+	glGenVertexArrays(1, &boxVAO);
+	glBindVertexArray(boxVAO);
+	//std::cout << glGenBuffers << std::endl;
+	printf("box vbo: %i\n", boxVBO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, boxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(finalBoxData), finalBoxData, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(fvec3)*2, (void*)0);
+	glEnableVertexAttribArray(0);
+
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(fvec3)*2, (void*)sizeof(fvec3));
+	glEnableVertexAttribArray(1);
+	
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
+
+
+
+	//printf("about to pause\n");
+	//cin.get();
+	//printf("paused\n");
+
+
+	glPointSize(5.0f);
 	while (!glfwWindowShouldClose(window)) {
+
+
+
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+
 		frameCounter++;
 		double currentFrame = glfwGetTime();
-		//frame time and fps calculation
 		deltaTime = currentFrame - lastFrame;
-		//printf("that frame took %f seconds\n", deltaTime);
 		lastFrame = currentFrame;
 
 		if (int(currentFrame) > lastSecondFrameCount) {
@@ -377,49 +416,61 @@ int main()
 		//status = clEnqueueWriteBuffer(cmdQueue, clToneMapData, CL_TRUE, 0, sizeof(ToneMapStruct), &toneMapData, 0, NULL,NULL);
 		//printf("write tonemap status: %i\n", status);
 
-		cl_int fc = frameCounter;
-		status = clSetKernelArg(waterSimKernel, 2, sizeof(cl_int), &fc);
-
-		if (frameCounter % 2 == 0) {
-
-			status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &bathOdd);
-			status = clSetKernelArg(waterSimKernel, 1, sizeof(cl_mem), &bathEven);
-			status = clSetKernelArg(renderKernel, 0, sizeof(cl_mem), &bathEven);
-		}
-		else {
-			status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &bathEven);
-			status = clSetKernelArg(waterSimKernel, 1, sizeof(cl_mem), &bathOdd);
-			status = clSetKernelArg(renderKernel, 0, sizeof(cl_mem), &bathOdd);
-		}
 
 
-		cl_event* firstPassEvent = new cl_event();
-		status = clEnqueueNDRangeKernel(cmdQueue, waterSimKernel, 2, NULL, globalWorkSize, NULL, 0, NULL, firstPassEvent);
-		if(status != 0)printf("range kernel: %i\n", status);
-		clWaitForEvents(1, firstPassEvent);
-		cl_event* secondPassEvent = new cl_event();
-		status = clEnqueueNDRangeKernel(cmdQueue, renderKernel, 2, NULL, globalWorkSize, NULL, 0, NULL, secondPassEvent);
-		if (status != 0)printf("range kernel: %i\n", status);
-		clWaitForEvents(1, secondPassEvent);
 
-		clFinish(cmdQueue);
+
+		//cl_int fc = frameCounter;
+		//status = clSetKernelArg(waterSimKernel, 2, sizeof(cl_int), &fc);
+
+
+
+		//cl_event* firstPassEvent = new cl_event();
+		//status = clEnqueueNDRangeKernel(cmdQueue, waterSimKernel, 2, NULL, globalWorkSize, NULL, 0, NULL, firstPassEvent);
+		//if(status != 0)printf("range kernel: %i\n", status);
+		//clWaitForEvents(1, firstPassEvent);
+		//cl_event* secondPassEvent = new cl_event();
+		//status = clEnqueueNDRangeKernel(cmdQueue, renderKernel, 2, NULL, globalWorkSize, NULL, 0, NULL, secondPassEvent);
+		//if (status != 0)printf("range kernel: %i\n", status);
+		//clWaitForEvents(1, secondPassEvent);w
+
+		//clFinish(cmdQueue);
 
 		//draw it to the glfw window
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-		glDrawBuffer(GL_BACK);
-
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, frameFBO);
-		glReadBuffer(GL_COLOR_ATTACHMENT0);
-
-		glBlitFramebuffer(0, 0, bathX, bathY, 0, 0, frameX, frameY, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
 
+		vec3 eye = vec3(sin(currentFrame) * boxSize.x, boxSize.y/2.0f, cos(currentFrame) * boxSize.z) + (boxSize/2.0f);
+
+		vec3 at(boxSize/2.0f);
+
+		mat4 view = glm::lookAt(eye, at, vec3(0, 1, 0));
+
+		mat4 proj = glm::perspective(glm::radians(70.0f), float(frameRatio), 0.1f, 200.0f);
+
+		glEnable(GL_DEPTH_TEST);
+		boxShader.use();
+		boxShader.setMatFour("view", view);
+		boxShader.setMatFour("projection", proj);
+
+		glBindVertexArray(boxVAO);
+		glDrawArrays(GL_TRIANGLES, 0, 36); 
+		glBindVertexArray(0);
+
+
+		glDisable(GL_DEPTH_TEST);
+		waterShader.use();
+		waterShader.setMatFour("view", view);
+		waterShader.setMatFour("projection", proj);
+
+		glBindVertexArray(ballVAO);
+		glDrawArrays(GL_POINTS, 0, MAX_BALLS);
+		glBindVertexArray(0);
+
+		
 
 		glfwSwapBuffers(window);
-
 		processInput(window);
 		glfwPollEvents();
-
 		
 #ifdef CIN
 		cin.get();

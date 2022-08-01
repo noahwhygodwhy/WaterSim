@@ -149,11 +149,14 @@
     <ClCompile Include="Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="frag.glsl" />
+    <None Include="boxFrag.glsl" />
     <None Include="packages.config" />
     <None Include="rand.cl" />
+    <None Include="Shared.cl" />
+    <None Include="waterFrag.glsl" />
     <None Include="WaterSim.cl" />
-    <None Include="vert.glsl" />
+    <None Include="boxVert.glsl" />
+    <None Include="waterVert.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="opencl.hpp" />

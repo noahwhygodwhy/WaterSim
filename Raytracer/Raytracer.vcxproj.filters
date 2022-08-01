@@ -22,6 +22,9 @@
     <Filter Include="Source Files\external">
       <UniqueIdentifier>{565a1142-6450-4b1d-8b92-30b32cb1d3a6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\glsl">
+      <UniqueIdentifier>{155db21e-3ddb-40f3-aa43-342f89cca3a0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WaterSim.cpp">
@@ -36,17 +39,26 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-    <None Include="frag.glsl">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="vert.glsl">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="rand.cl">
       <Filter>OpenCL</Filter>
     </None>
+    <None Include="Shared.cl">
+      <Filter>OpenCL</Filter>
+    </None>
     <None Include="WaterSim.cl">
-      <Filter>Resource Files</Filter>
+      <Filter>OpenCL</Filter>
+    </None>
+    <None Include="boxVert.glsl">
+      <Filter>Source Files\glsl</Filter>
+    </None>
+    <None Include="boxFrag.glsl">
+      <Filter>Source Files\glsl</Filter>
+    </None>
+    <None Include="waterFrag.glsl">
+      <Filter>Source Files\glsl</Filter>
+    </None>
+    <None Include="waterVert.glsl">
+      <Filter>Source Files\glsl</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
