@@ -26,10 +26,10 @@ enum Axis {
 //};
 
 struct KDNode {
-	float value;
-	uint32_t pointIdx;
-	int32_t greaterChild;
-	int32_t lesserChild;
+	float value = -1.0f;
+	uint32_t pointIdx = 0;
+	int32_t greaterChild = -1;
+	int32_t lesserChild = -1;
 };
 
 struct KDTree {
@@ -45,10 +45,11 @@ struct KDTree {
 //}
 
 
-
+void printTree(KDNode* theTree);
 
 
 KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints);
+
 /*
 
 0b00000...00ZYX

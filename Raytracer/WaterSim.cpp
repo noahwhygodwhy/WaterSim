@@ -35,7 +35,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 20;
+constexpr uint32_t MAX_BALLS = 16;
 constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -430,13 +430,7 @@ int main()
 
 		KDNode* theTree = makeKDTree(readInPositions, numberOfBalls);
 
-
-		glMatrixMode(GL_PROJECTION); 
-		glPer(0, 640, 480, 0, -1, 1);
-
-
-
-
+		printTree(theTree);
 
 		////set the frame counter argument
 		//status = clSetKernelArg(waterSimKernel, 7, sizeof(cl_uint), &frameCounter);
