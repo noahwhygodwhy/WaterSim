@@ -35,7 +35,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 2;
+constexpr uint32_t MAX_BALLS = 20;
 constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -198,7 +198,12 @@ int main()
 			for (int z = 0; z < counts.z;  z++) {
 				if (numberOfBalls < MAX_BALLS) {
 
-					initialBathPositions[numberOfBalls] = (fvec3(x, y, z) * fvec3(ballRad*2.0f));
+					float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
+					float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
+					float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
+					
+
+					initialBathPositions[numberOfBalls] = (fvec3(xR, yR, zR));
 					initialBathVelocities[numberOfBalls] = fvec3(0.0f);
 					numberOfBalls++;
 				}
@@ -423,7 +428,7 @@ int main()
 
 
 
-		KDTree theTree = makeWaterKDTree(readInPositions, numberOfBalls, ballRad);
+		KDTree theTree = makeKDTree(readInPositions, numberOfBalls);
 
 
 
