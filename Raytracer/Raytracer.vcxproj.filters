@@ -36,6 +36,9 @@
     <ClCompile Include="glad.c">
       <Filter>Source Files\external</Filter>
     </ClCompile>
+    <ClCompile Include="KDTree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -79,6 +82,9 @@
     </ClInclude>
     <ClInclude Include="opencl.hpp">
       <Filter>Header Files\external</Filter>
+    </ClInclude>
+    <ClInclude Include="KDTree.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

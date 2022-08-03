@@ -1,10 +1,12 @@
 #include "WaterSim.hpp"
 #include "clTypeDefs.hpp"
 #include <glm/gtx/normal.hpp>
+#include "KDTree.hpp"
 
 typedef float4 fvec4;
 typedef float3 fvec3;
 
+#define CIN
 #define CPP
 //#include "sharedStructs.cl"
 
@@ -33,8 +35,8 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 2000000;
-
+constexpr uint32_t MAX_BALLS = 2;
+constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
 void frameBufferSizeCallback(GLFWwindow* window, uint64_t width, uint64_t height) {
@@ -123,7 +125,6 @@ void initOpenCL(cl_context& clContext, cl_device_id& device, GLFWwindow* window)
 
 	
 }
-
 int main()
 {
 	srand(0u);
@@ -182,6 +183,7 @@ int main()
 	fvec3* initialBathVelocities = new fvec3[MAX_BALLS](fvec3(0));
 
 
+	uint32_t numberOfBalls = 0;
 
 
 
@@ -191,15 +193,14 @@ int main()
 
 	printf("%i, %i, %i\n", counts.x, counts.y, counts.z);
 
-	uint64_t i = 0;
 	for (int x = 0; x < counts.x/2; x++) {
 		for (int y = 0; y < (counts.y*3)/4; y++) {
 			for (int z = 0; z < counts.z;  z++) {
-				if (i < MAX_BALLS) {
+				if (numberOfBalls < MAX_BALLS) {
 
-					initialBathPositions[i] = (fvec3(x, y, z) * fvec3(ballRad*2.0f));
-					initialBathVelocities[i] = fvec3(0.0f);
-					i++;
+					initialBathPositions[numberOfBalls] = (fvec3(x, y, z) * fvec3(ballRad*2.0f));
+					initialBathVelocities[numberOfBalls] = fvec3(0.0f);
+					numberOfBalls++;
 				}
 			}
 		}
@@ -289,6 +290,10 @@ int main()
 	printf("write 0 status: %i\n", status);
 
 	
+	
+
+
+
 
 	fvec3 finalBoxData[72] = {
 		vec3(0.000000, 1.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
@@ -382,8 +387,15 @@ int main()
 	//printf("paused\n");
 
 
+	fvec3* readInPositions = new fvec3[numberOfBalls]();
+
+
 	glPointSize(5.0f);
 	while (!glfwWindowShouldClose(window)) {
+
+
+
+
 
 
 
@@ -404,6 +416,17 @@ int main()
 			printf("fps: ~%f\n", sum/30.0f);
 		}
 		frameTimes[frameCounter % 30] = 1.0f / float(deltaTime);
+
+		glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
+		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec3)*numberOfBalls, readInPositions);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
+
+		KDTree theTree = makeWaterKDTree(readInPositions, numberOfBalls, ballRad);
+
+
+
 
 
 

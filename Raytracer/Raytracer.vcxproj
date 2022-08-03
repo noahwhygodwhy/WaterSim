@@ -145,6 +145,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="glad.c" />
+    <ClCompile Include="KDTree.cpp" />
     <ClCompile Include="WaterSim.cpp" />
     <ClCompile Include="Shader.cpp" />
   </ItemGroup>
@@ -159,6 +160,7 @@
     <None Include="waterVert.glsl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="KDTree.hpp" />
     <ClInclude Include="opencl.hpp" />
     <ClInclude Include="WaterSim.hpp" />
     <ClInclude Include="glad.h" />
