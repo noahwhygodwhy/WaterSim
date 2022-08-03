@@ -6,15 +6,51 @@
 
 
 
-void processNode(const fvec3* balls, const size_t& numberOfPoints, const uint32_t* totalList, const uint32_t layer, const size_t receivedIndex)
+void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoints, uint32_t* totalList, const uint32_t layer, const size_t receivedIndex)
 {
 	uint32_t axis = layer % 3;
 	auto mySert = [balls, axis](size_t a, size_t b) {return balls[a][0] < balls[b][0]; };
-
 	std::sort(totalList, totalList + numberOfPoints, mySert);
 
-	uint32_t middleIdx = numberOfPoints/2 
 
+	uint32_t middleIdx = numberOfPoints / 2;
+	//TODO: if there are no points above middleIdx; 
+	//todo: if there are no points below middleidx;
+
+	int32_t lesserChildIdx = -1;
+	int32_t greaterChildIdx = -1;
+	uint32_t* lesserList = 0;
+	uint32_t* greaterList = 0;
+
+	if (middleIdx > 0) {//has lesser children
+		lesserList = new uint32_t[middleIdx]();
+		lesserChildIdx = receivedIndex << 1;
+	}
+	if (middleIdx < numberOfPoints - 1) { //has greater children
+		greaterList = new uint32_t[numberOfPoints - middleIdx]();
+		greaterChildIdx = (receivedIndex << 1) + 1;
+	}
+	theTree[receivedIndex] = KDNode(
+		balls[totalList[middleIdx]][axis],
+		totalList[middleIdx],
+		greaterChildIdx,
+		lesserChildIdx
+	);
+
+	if (lesserList) {//has lesser children
+		memcpy(lesserList, totalList, middleIdx);
+	}
+	if (greaterList) { //has greater children
+		memcpy(greaterList, totalList + middleIdx + 1, numberOfPoints - middleIdx);
+	}
+	delete[] totalList;
+	
+	if (lesserList) {//has lesser children
+		processNode(theTree, balls, middleIdx, lesserList, layer + 1, lesserChildIdx);
+	}
+	if (greaterList) { //has greater children
+		processNode(theTree, balls, numberOfPoints - middleIdx, greaterList, layer + 1, greaterChildIdx);
+	}
 }
 
 
@@ -25,39 +61,16 @@ void processNode(const fvec3* balls, const size_t& numberOfPoints, const uint32_
 
 
 
-KDTree makeKDTree(const fvec3* balls, const size_t& numberOfPoints) {
-	size_t* totalList = new size_t[numberOfPoints];
-	for (size_t i = 0; i < numberOfPoints; i++) {
-		totalList[i] = i;
+KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints) {
+	uint32_t* totalList = new uint32_t[numberOfPoints];
+	for (uint32_t i = 0; i < numberOfPoints; i++) {
+		totalList[i] = i;	
 	}
 
-
-
-	Axis axis = X;
-
-	//auto mySort = [balls, axis](size_t a, size_t b) { return std::sort(a, b, [balls, axis](size_t x, size_t y) {return balls[x][axis] > balls[y][axis]; }); };
-
-
-	auto mySert = [balls, axis](size_t a, size_t b) {return balls[a][0] < balls[b][0];};
-
-
-	std::sort(totalList, totalList + numberOfPoints, mySert);
-
-	for (int i = 0; i < numberOfPoints; i++) {
-		printf("%i: %s\n", i, glm::to_string(balls[totalList[i]]).c_str());
-
-	}
-	exit(0);
-
-
-	KDTree toReturn = KDTree();
-	toReturn.size = numberOfPoints;
-
-
-	//TODO: need to allocate the tree. How do i actually determine how much memory I need? Am I failing to recognize what's there
-	//or is it actually complicated? https://www.geeksforgeeks.org/octree-insertion-and-searching/
-
-
-	delete[] totalList;
+	size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(numberOfPoints))));
+	printf("number of nodes for memory: %lu\n", memForTree);
+	KDNode* toReturn = new KDNode[memForTree]();
+	processNode(toReturn, balls, numberOfPoints, totalList, 0, 0);
+	return toReturn;
 }
 

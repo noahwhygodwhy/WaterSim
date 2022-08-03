@@ -428,10 +428,11 @@ int main()
 
 
 
-		KDTree theTree = makeKDTree(readInPositions, numberOfBalls);
+		KDNode* theTree = makeKDTree(readInPositions, numberOfBalls);
 
 
-
+		glMatrixMode(GL_PROJECTION); 
+		glPer(0, 640, 480, 0, -1, 1);
 
 
 

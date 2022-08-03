@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include "glm/gtx/string_cast.hpp"
+#include <glm/gtc/integer.hpp>
 using namespace std;
 using namespace glm;
 
@@ -47,7 +48,7 @@ struct KDTree {
 
 
 
-KDTree makeKDTree(const fvec3* balls, const size_t& numberOfPoints);
+KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints);
 /*
 
 0b00000...00ZYX
