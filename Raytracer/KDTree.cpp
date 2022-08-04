@@ -36,7 +36,7 @@ void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoin
 	}
 	printf("\n");
 	uint32_t axis = layer % 3;
-	auto mySert = [balls, axis](size_t a, size_t b) {return balls[a][0] < balls[b][0]; };
+	auto mySert = [balls, axis](size_t a, size_t b) {return balls[a][axis] < balls[b][axis]; };
 	std::sort(totalList, totalList + numberOfPoints, mySert);
 
 	for (int i = 0; i < numberOfPoints; i++) {
@@ -62,7 +62,7 @@ void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoin
 		greaterList = new uint32_t[numberOfPoints - middleIdx - 1]();
 		greaterChildIdx = (receivedIndex << 1) + 1;
 	}
-	theTree[receivedIndex] = KDNode(
+	theTree[receivedIndex-1] = KDNode(
 		balls[totalList[middleIdx]][axis],
 		totalList[middleIdx],
 		greaterChildIdx,
@@ -114,7 +114,7 @@ KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints) {
 	size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(numberOfPoints))));
 	printf("number of nodes for memory: %lu\n", memForTree);
 	KDNode* toReturn = new KDNode[memForTree]();
-	processNode(toReturn, balls, numberOfPoints, totalList, 0, 0);
+	processNode(toReturn, balls, numberOfPoints, totalList, 0, 1);
 	return toReturn;
 }
 
