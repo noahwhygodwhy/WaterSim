@@ -43,8 +43,8 @@ struct KDNode {
 void printTree(KDNode* theTree);
 
 
-KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints);
-void getDotsInRange(vector<int32_t>& outputVector, const fvec3* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex = 1, uint32_t layer = 0);
+KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints);
+void getDotsInRange(vector<int32_t>& outputVector, const fvec4* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex = 1, uint32_t layer = 0);
 /*
 
 0b00000...00ZYX

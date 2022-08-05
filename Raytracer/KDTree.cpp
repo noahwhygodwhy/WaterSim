@@ -74,14 +74,20 @@ void printTree(KDNode* theTree) {
 
 //TODO: multithread later by turning it into a queue
 
-void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoints, uint32_t* totalList, const uint32_t layer, const size_t receivedIndex)
+void processNode(KDNode* theTree, const fvec4* balls, const size_t& numberOfPoints, uint32_t* totalList, const uint32_t layer, const size_t receivedIndex)
 {
 
 	uint32_t axis = layer % 3;
-	auto mySert = [balls, axis](size_t a, size_t b) {return balls[a][axis] < balls[b][axis]; };
+
+	auto mySert = [balls, axis](size_t a, size_t b) {
+
+		return balls[a][axis] < balls[b][axis];
+	};
+
+
 	std::sort(totalList, totalList + numberOfPoints, mySert);
 
-	uint32_t middleIdx = numberOfPoints / 2;
+	int32_t middleIdx = numberOfPoints / 2;
 
 	int32_t lesserChildIdx = -1;
 	int32_t greaterChildIdx = -1;
@@ -89,10 +95,12 @@ void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoin
 	uint32_t* greaterList = 0;
 
 	if (middleIdx > 0) {//has lesser children
+		printf("about to make array with middleIdx: %u\n", middleIdx);
 		lesserList = new uint32_t[middleIdx]();
 		lesserChildIdx = receivedIndex << 1;
 	}
 	if (middleIdx < numberOfPoints - 1) { //has greater children
+		printf("about to make array with the other: %u\n", numberOfPoints - middleIdx - 1);
 		greaterList = new uint32_t[numberOfPoints - middleIdx - 1]();
 		greaterChildIdx = (receivedIndex << 1) + 1;
 	}
@@ -111,7 +119,7 @@ void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoin
 	}
 
 	//printf("\n");
-	delete[] totalList;
+	//delete[] totalList;
 	
 	if (lesserList) {//has lesser children
 		processNode(theTree, balls, middleIdx, lesserList, layer + 1, lesserChildIdx);
@@ -124,7 +132,7 @@ void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoin
 
 
 
-KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints) {
+KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints) {
 	uint32_t* totalList = new uint32_t[numberOfPoints];
 	for (uint32_t i = 0; i < numberOfPoints; i++) {
 		totalList[i ] = i;	
@@ -147,7 +155,7 @@ void spaces(int32_t i) {
 
 
 //get nearest neighbors https://en.wikipedia.org/wiki/K-d_tree#Nearest_neighbour_search
-void getDotsInRange(vector<int32_t>& outputVector, const fvec3* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex, uint32_t layer) {
+void getDotsInRange(vector<int32_t>& outputVector, const fvec4* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex, uint32_t layer) {
 	
 	
 	for (int k = 0; k < layer; k++) {
@@ -156,7 +164,7 @@ void getDotsInRange(vector<int32_t>& outputVector, const fvec3* balls, KDNode* t
 	printf("on layer %i, doing index %i\n", layer, receivedIndex);
 	
 	uint32_t axis = layer % 3;
-	fvec3 theBall = balls[originDot];
+	fvec4 theBall = balls[originDot];
 	KDNode currNode = theTree[receivedIndex];
 
 
