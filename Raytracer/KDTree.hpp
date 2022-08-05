@@ -7,6 +7,7 @@
 #include <algorithm>
 #include "glm/gtx/string_cast.hpp"
 #include <glm/gtc/integer.hpp>
+#include <glm/gtx/norm.hpp>
 using namespace std;
 using namespace glm;
 
@@ -27,15 +28,9 @@ enum Axis {
 
 struct KDNode {
 	float value = -1.0f;
-	uint32_t pointIdx = 0;
-	int32_t greaterChild = -1;
-	int32_t lesserChild = -1;
-};
-
-struct KDTree {
-	KDNode* tree;
-	uint32_t layers;
-	uint32_t size;
+	uint32_t pointIdx = 0; //index into balls
+	int32_t greaterChild = -1; //index into the tree
+	int32_t lesserChild = -1;//index into the tree
 };
 
 
@@ -49,7 +44,7 @@ void printTree(KDNode* theTree);
 
 
 KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints);
-
+void getDotsInRange(vector<int32_t>& outputVector, const fvec3* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex = 1, uint32_t layer = 0);
 /*
 
 0b00000...00ZYX

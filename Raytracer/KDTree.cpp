@@ -5,31 +5,78 @@ void printTree(KDNode* theTree) {
 	const char* axises = "XYZ";
 	int layer = 0;
 	bool hasNextLayer = true;
-	while (hasNextLayer && layer < 6) {
-		hasNextLayer = false;
-		size_t firstIndex = size_t(glm::pow(2, layer));
 
-		char axis = axises[layer % 3];
 
-		for (int i = 0; i < glm::pow(2, layer); i++) {
-			KDNode curr = theTree[firstIndex + i];
-			if (curr.greaterChild >= 0 || curr.lesserChild >= 0) {
-				hasNextLayer = true;
-			}
-			for (int i = 0; i < layer; i++) {
-				printf("  ");
-			}
-			printf("%lu-%c%f\n", curr.pointIdx, axis, curr.value);
+	queue<KDNode> printQueue = queue<KDNode>();
+	printQueue.push(theTree[0]);
+
+	int i = 0; 
+	while (!printQueue.empty()) {
+		int spaces = ceil(glm::log2(i+1));
+		KDNode curr = printQueue.front();
+		printQueue.pop();
+		for (int k = 0; k < spaces; k++) {
+			printf("  ");
 		}
-		layer++;
+		printf("i: %i, L:%i, R:%i\n",i, curr.lesserChild, curr.greaterChild);
+		if (curr.lesserChild > 0) {
+			printQueue.push(theTree[curr.lesserChild]);
+		}
+		if (curr.greaterChild > 0) {
+			printQueue.push(theTree[curr.greaterChild]);
+		}
+		i++;
 	}
+
+
+	//while (hasNextLayer && layer < 6) {
+
+
+
+
+	//	//printf("on layer %i\n", layer);
+	//	hasNextLayer = false;
+	//	size_t firstIndex = size_t(glm::pow(2, layer));
+
+	//	char axis = axises[layer % 3];
+
+	//	for (int i = 0; i < glm::pow(2, layer); i++) {
+	//		int32_t indexIntoTree = (firstIndex + i)-1;
+	//		//printf("index into tree; %i\n", indexIntoTree);
+	//		KDNode curr = theTree[firstIndex + i];
+	//		if (curr.greaterChild >= 0 || curr.lesserChild >= 0) {
+	//			//printf("it has a next layer\n");
+	//			hasNextLayer = true;
+	//		}
+	//		for (int i = 0; i < layer; i++) {
+	//			printf("  ");
+	//		}
+	//		printf("treeIdx: %i, L:%i, R:%i\n", indexIntoTree, curr.lesserChild, curr.greaterChild);
+	//	}
+	//	layer++;
+	//}
 }
+
+
+
+
+
+
+
+
+//TODO: processNode is wrong, misses a point at some point..?
+
+
+
+
+
 
 
 //TODO: multithread later by turning it into a queue
 
 void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoints, uint32_t* totalList, const uint32_t layer, const size_t receivedIndex)
 {
+
 	uint32_t axis = layer % 3;
 	auto mySert = [balls, axis](size_t a, size_t b) {return balls[a][axis] < balls[b][axis]; };
 	std::sort(totalList, totalList + numberOfPoints, mySert);
@@ -52,8 +99,8 @@ void processNode(KDNode* theTree, const fvec3* balls, const size_t& numberOfPoin
 	theTree[receivedIndex-1] = KDNode(
 		balls[totalList[middleIdx]][axis],
 		totalList[middleIdx],
-		greaterChildIdx,
-		lesserChildIdx
+		greaterChildIdx-1,
+		lesserChildIdx-1
 	);
 
 	if (lesserList) {//has lesser children
@@ -92,28 +139,56 @@ KDNode* makeKDTree(const fvec3* balls, const size_t& numberOfPoints) {
 
 
 
+void spaces(int32_t i) {
+	for (int k = 0; k < i; k++) {
+		printf("  ");
+	}
+}
+
 
 //get nearest neighbors https://en.wikipedia.org/wiki/K-d_tree#Nearest_neighbour_search
-void getDotsInRange(vector<uint32_t>& outputVector, const fvec3* balls, KDNode* theTree, const size_t receivedIndex, uint32_t originDot, float range, uint32_t layer = 0) {
+void getDotsInRange(vector<int32_t>& outputVector, const fvec3* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex, uint32_t layer) {
+	
+	
+	for (int k = 0; k < layer; k++) {
+		printf("  ");
+	}
+	printf("on layer %i, doing index %i\n", layer, receivedIndex);
+	
 	uint32_t axis = layer % 3;
 	fvec3 theBall = balls[originDot];
 	KDNode currNode = theTree[receivedIndex];
 
-	//this might be less than efficient, but allows for weirdness with duplicate values
 
-	int32_t newIndex = (int32_t(theBall[axis] > currNode.value) * currNode.greaterChild) + (int32_t(theBall[axis] < currNode.value) * currNode.lesserChild);
-	if (newIndex == 0) {
-		printf("something's wrong in getsdotsinrange newIndex\n");
-		exit(0);
-	}
-	if (newIndex > 0) {
-		getDotsInRange(outputVector, balls, theTree, uint32_t(newIndex), originDot, range, layer + 1);
+	if ((distance2(theBall, balls[currNode.pointIdx]) <= range*range) && (currNode.pointIdx != originDot)) {
+
+		//printf("%i is close enough to %i, adding it\n", currNode.pointIdx, originDot);
+		outputVector.push_back(currNode.pointIdx);
 	}
 
-	//TODO: finish it
+	//if originDot within range of the split, then you have to do both
+	//if originDot out of range of the split, and on the wrong side, then you can prune
 
 
 
+	bool tooCloseToCall = glm::abs(theBall[axis] - currNode.value) <= range;
+	bool possiblyGreater = theBall[axis] > currNode.value;
+	bool possiblyLesser = theBall[axis] < currNode.value;
 
+	spaces(layer);
+	printf("tooCloseToCall: %i, possiblyGreater: %i, possiblyLesser: %i\n", tooCloseToCall, possiblyGreater, possiblyLesser);
+
+
+	if (currNode.greaterChild > 0 and (tooCloseToCall || possiblyGreater)) {
+		spaces(layer);
+		printf("has a greater child at %i", currNode.greaterChild);
+
+		getDotsInRange(outputVector, balls, theTree, originDot, range, currNode.greaterChild, layer + 1);
+	}
+	if (currNode.greaterChild > 0 and (tooCloseToCall || possiblyLesser)) {
+		spaces(layer);
+		printf("has a lesser child at %i", currNode.lesserChild);
+		getDotsInRange(outputVector, balls, theTree, originDot, range, currNode.lesserChild, layer + 1);
+	}
 }
 
