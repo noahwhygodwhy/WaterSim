@@ -6,7 +6,7 @@
 typedef float4 fvec4;
 typedef float3 fvec3;
 
-//#define CIN
+#define CIN
 #define CPP
 //#include "sharedStructs.cl"
 
@@ -21,7 +21,7 @@ uint32_t frameY = 1000;
 
 
 vec3 boxSize = vec3(10.0f);
-float ballRad = 0.05f;
+float ballRad = 0.8f;
 
 double frameRatio = double(frameX) / double(frameY);
 
@@ -35,7 +35,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 1600;
+constexpr uint32_t MAX_BALLS = 60;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -151,12 +151,9 @@ int main()
 
 
 	glEnable(GL_DEPTH_TEST);
-
-	glEnable(GL_DEBUG_OUTPUT);
-
-
 	glEnable(GL_CULL_FACE);
 
+	glEnable(GL_DEBUG_OUTPUT);
 	glDebugMessageCallback(MessageCallback, 0);
 
 	cl_int status = 0;
@@ -194,37 +191,45 @@ int main()
 
 	printf("%i, %i, %i\n", counts.x, counts.y, counts.z);
 
-	for (int x = 0; x < counts.x/2; x++) {
-		for (int y = 0; y < (counts.y*3)/4; y++) {
-			for (int z = 0; z < counts.z;  z++) {
-				if (numberOfBalls < MAX_BALLS) {
-					float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
-					float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
-					float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
-					initialBathPositions[numberOfBalls] = (fvec4(xR, yR, zR, 0));
 
 
-					//
-					initialBathPositions[numberOfBalls] = fvec4((fvec3(x, y, z) * fvec3(ballRad * 2.0f)), 0.0f);
+	for (int i = 0; i < MAX_BALLS; i++) {
+		float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
+		float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
+		float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
+		initialBathPositions[numberOfBalls] = (fvec4(xR, yR, zR, 0));
 
-					initialBathVelocities[numberOfBalls] = fvec3(0.0f);
-					numberOfBalls++;
-				}
-			}
-		}
+
+		//
+		//initialBathPositions[numberOfBalls] = fvec4((fvec3(x, y, z) * fvec3(ballRad * 2.0f)), 0.0f);
+
+		initialBathVelocities[numberOfBalls] = fvec3(0.0f);
+		numberOfBalls++;
+		
 	}
 
-	KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls);
 
-	printTree(theTree);
+	//for (int x = 0; x < counts.x/2; x++) {
+	//	for (int y = 0; y < (counts.y*3)/4; y++) {
+	//		for (int z = 0; z < counts.z;  z++) {
+	//			if (numberOfBalls < MAX_BALLS) {
+	//				float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
+	//				float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
+	//				float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
+	//				initialBathPositions[numberOfBalls] = (fvec4(xR, yR, zR, 0));
 
 
-	vector<int32_t> listOfClosePoints = vector<int32_t>();
-	getDotsInRange(listOfClosePoints, initialBathPositions, theTree, 0, 5.0f);
-	for (int32_t k : listOfClosePoints) {
-		initialBathPositions[k].w = 1.0f;
-	}
-	initialBathPositions[0].w = 0.69f;
+	//				//
+	//				//initialBathPositions[numberOfBalls] = fvec4((fvec3(x, y, z) * fvec3(ballRad * 2.0f)), 0.0f);
+
+	//				initialBathVelocities[numberOfBalls] = fvec3(0.0f);
+	//				numberOfBalls++;
+	//			}
+	//		}
+	//	}
+	//}
+
+	
 
 
 
@@ -234,7 +239,7 @@ int main()
 	glBindVertexArray(ballVAO);
 	glGenBuffers(1, &ballVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(fvec4) * MAX_BALLS, initialBathPositions, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(fvec4) * MAX_BALLS, initialBathPositions, GL_STATIC_DRAW);
 
 
 	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)0);
@@ -411,7 +416,7 @@ int main()
 	//printf("paused\n");
 
 
-	fvec3* readInPositions = new fvec3[numberOfBalls]();
+	fvec4* readInPositions = new fvec4[numberOfBalls]();
 
 
 	glPointSize(5.0f);
@@ -441,24 +446,82 @@ int main()
 		}
 		frameTimes[frameCounter % 30] = 1.0f / float(deltaTime);
 
-		/*glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
-		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec3)*numberOfBalls, readInPositions);
+
+
+
+
+
+
+		glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
+		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec4)*numberOfBalls, readInPositions);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-		KDNode* theTree = makeKDTree(readInPositions, numberOfBalls);
+		//TODO: don't initialize the array each time
 
+
+		
+
+
+
+		printf("27 coords: %s\n", glm::to_string(initialBathPositions[27]).c_str());
+
+		int32_t lookingIndex = 5;
+
+
+		//initialBathPositions[lookingIndex].z = boxSize.z-( currentFrame / 10.0f);
+		//initialBathPositions[lookingIndex].y = currentFrame / 10.0f;
+		initialBathPositions[lookingIndex].x = currentFrame / 2.0f;
+
+
+		float theRange = 2.0f;
+
+		KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls);
 		printTree(theTree);
-
-
-		vector<int32_t> listOfClosePoints = vector<int32_t>();
-		getDotsInRange(listOfClosePoints, readInPositions, theTree, 0, 5.0f);
-		printf("adjacent:\n");
-		for (int32_t asdf : listOfClosePoints) {
-			printf("%i, ", asdf);
+		vector<int32_t> listOfClosePoints = getDotsInRange(initialBathPositions, theTree, lookingIndex, theRange);
+		vector<int32_t> manualClosePoints = vector<int32_t>();
+		fvec3 twentyFourPos = initialBathPositions[lookingIndex].xyz;
+		for (int32_t i = 0; i < numberOfBalls; i++) {
+			if (i != lookingIndex) {
+				fvec3 otherPos = initialBathPositions[i];
+				float d = glm::distance(twentyFourPos, otherPos);
+				if (d <= theRange) {
+					manualClosePoints.push_back(i);
+				}
+			}
 		}
-		printf("\n");*/
+
+		std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
+		std::sort(manualClosePoints.begin(), manualClosePoints.end());
+		printf("kdneighbors:\n");
+		for (auto k : listOfClosePoints) {
+			printf("%i, ", k);
+		}
+		printf("\n");
+		printf("bruteforce:\n");
+		for (auto k : manualClosePoints) {
+			printf("%i, ", k);
+		}
+		printf("\n");
 
 
+
+		for (int32_t i = 0; i < numberOfBalls; i++) {
+			initialBathPositions[i].w = 0.0f;
+		}
+
+		for (int32_t k : listOfClosePoints) {
+			initialBathPositions[k].w = 1.0f;
+		}
+		initialBathPositions[lookingIndex].w = 0.69f;
+
+
+		glBindVertexArray(ballVAO);
+		glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(fvec4)* MAX_BALLS, initialBathPositions, GL_STATIC_DRAW);
+
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		//printTree(theTree);
 
 
 
@@ -492,7 +555,10 @@ int main()
 		//draw it to the glfw window
 
 
-		vec3 eye = vec3(sin(currentFrame) * boxSize.x, boxSize.y/2.0f, cos(currentFrame) * boxSize.z) + (boxSize/2.0f);
+		vec3 eye = vec3(sin(currentFrame/2.0f) * boxSize.x, boxSize.y/2.0f, cos(currentFrame/2.0f) * boxSize.z) + (boxSize/2.0f);
+
+		//eye = vec3(boxSize.x, boxSize.y / 2.0f, boxSize.z) + (boxSize / 2.0f);
+
 
 		vec3 at(boxSize/2.0f);
 
@@ -519,7 +585,6 @@ int main()
 		glDrawArrays(GL_POINTS, 0, MAX_BALLS);
 		glBindVertexArray(0);
 
-		
 
 		glfwSwapBuffers(window);
 		processInput(window);

@@ -2,9 +2,11 @@
 #define KDTREE_H
 
 
-#include "glm/glm.hpp"
 #include <vector>
 #include <algorithm>
+#include <queue>
+#define GLM_FORCE_SWIZZLE
+#include "glm/glm.hpp"
 #include "glm/gtx/string_cast.hpp"
 #include <glm/gtc/integer.hpp>
 #include <glm/gtx/norm.hpp>
@@ -44,7 +46,8 @@ void printTree(KDNode* theTree);
 
 
 KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints);
-void getDotsInRange(vector<int32_t>& outputVector, const fvec4* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex = 1, uint32_t layer = 0);
+//void getDotsInRange(vector<int32_t>& outputVector, const fvec4* balls, KDNode* theTree, uint32_t originDot, float range, const int32_t receivedIndex = 1, uint32_t layer = 0);
+vector<int32_t> getDotsInRange(const fvec4* balls, KDNode* theTree, uint32_t originDot, float range);
 /*
 
 0b00000...00ZYX
