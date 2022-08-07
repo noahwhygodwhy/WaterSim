@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <queue>
+#include <iostream>
 #define GLM_FORCE_SWIZZLE
 #include "glm/glm.hpp"
 #include "glm/gtx/string_cast.hpp"

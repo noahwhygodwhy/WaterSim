@@ -39,6 +39,9 @@
     <ClCompile Include="KDTree.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ThreadPool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -84,6 +87,9 @@
       <Filter>Header Files\external</Filter>
     </ClInclude>
     <ClInclude Include="KDTree.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadPool.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

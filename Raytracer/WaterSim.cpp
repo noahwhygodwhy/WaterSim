@@ -6,7 +6,7 @@
 typedef float4 fvec4;
 typedef float3 fvec3;
 
-#define CIN
+//#define CIN
 #define CPP
 //#include "sharedStructs.cl"
 
@@ -35,7 +35,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 60;
+constexpr uint32_t MAX_BALLS = 100000;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -153,9 +153,9 @@ int main()
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 
-	glEnable(GL_DEBUG_OUTPUT);
-	glDebugMessageCallback(MessageCallback, 0);
-
+	//glEnable(GL_DEBUG_OUTPUT);
+	//glDebugMessageCallback(MessageCallback, 0);
+	
 	cl_int status = 0;
 	cl_context clContext;
 	cl_device_id device;
@@ -429,7 +429,7 @@ int main()
 
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		frameCounter++;
 		double currentFrame = glfwGetTime();
@@ -442,7 +442,7 @@ int main()
 			for (float f : frameTimes) {
 				sum += f;
 			}
-			printf("fps: ~%f\n", sum/30.0f);
+			printf("fps: ~%f\n", sum / 30.0f);
 		}
 		frameTimes[frameCounter % 30] = 1.0f / float(deltaTime);
 
@@ -453,33 +453,40 @@ int main()
 
 
 		glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
-		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec4)*numberOfBalls, readInPositions);
+		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec4) * numberOfBalls, readInPositions);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 		//TODO: don't initialize the array each time
 
 
-		
 
 
 
-		printf("27 coords: %s\n", glm::to_string(initialBathPositions[27]).c_str());
 
-		int32_t lookingIndex = 5;
+		//printf("43 coords: %s\n", glm::to_string(initialBathPositions[43]).c_str());
 
+		//int32_t lookingIndex = 0;
+		int32_t lookingIndex = 9; //is missing 32 with 60 points
 
-		//initialBathPositions[lookingIndex].z = boxSize.z-( currentFrame / 10.0f);
-		//initialBathPositions[lookingIndex].y = currentFrame / 10.0f;
+		//for (int lookingIndex = 0; lookingIndex < numberOfBalls; lookingIndex++) {
+
+		initialBathPositions[lookingIndex].z = boxSize.z-( currentFrame / 2.0f);
+		initialBathPositions[lookingIndex].y = currentFrame / 2.0f;
 		initialBathPositions[lookingIndex].x = currentFrame / 2.0f;
 
 
-		float theRange = 2.0f;
-
+		float theRange = 1.0f;
+		//printf("\n\n");
 		KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls);
-		printTree(theTree);
-		vector<int32_t> listOfClosePoints = getDotsInRange(initialBathPositions, theTree, lookingIndex, theRange);
+		//printf("\n\n");
+		//printTree(theTree);
+		//printf("\n\n");
+		//cin.get();
+		//vector<int32_t> listOfClosePoints = getDotsInRange(initialBathPositions, theTree, lookingIndex, theRange);
+		vector<int32_t> listOfClosePoints = vector<int32_t>();
 		vector<int32_t> manualClosePoints = vector<int32_t>();
-		fvec3 twentyFourPos = initialBathPositions[lookingIndex].xyz;
+
+		/*fvec3 twentyFourPos = initialBathPositions[lookingIndex].xyz;
 		for (int32_t i = 0; i < numberOfBalls; i++) {
 			if (i != lookingIndex) {
 				fvec3 otherPos = initialBathPositions[i];
@@ -492,7 +499,34 @@ int main()
 
 		std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
 		std::sort(manualClosePoints.begin(), manualClosePoints.end());
-		printf("kdneighbors:\n");
+
+		if (listOfClosePoints.size() != manualClosePoints.size()) {
+			for (uint asdf = 0; asdf < listOfClosePoints.size(); asdf++) {
+				if (listOfClosePoints[asdf] != manualClosePoints[asdf]) {
+					printf("looking index: %i\n", lookingIndex);
+					printf("kdneighbors:\n");
+					for (auto k : listOfClosePoints) {
+						printf("%i, ", k);
+					}
+					printf("\n");
+					printf("bruteforce:\n");
+					for (auto k : manualClosePoints) {
+						printf("%i, ", k);
+					}
+					printf("\n");
+					cin.get();
+				}
+			}
+		}*/
+
+		//}
+
+
+
+
+
+
+		/*printf("kdneighbors:\n");
 		for (auto k : listOfClosePoints) {
 			printf("%i, ", k);
 		}
@@ -501,7 +535,7 @@ int main()
 		for (auto k : manualClosePoints) {
 			printf("%i, ", k);
 		}
-		printf("\n");
+		printf("\n");*/
 
 
 
@@ -513,6 +547,8 @@ int main()
 			initialBathPositions[k].w = 1.0f;
 		}
 		initialBathPositions[lookingIndex].w = 0.69f;
+
+		initialBathPositions[32].w = 0.4f;
 
 
 		glBindVertexArray(ballVAO);
@@ -557,7 +593,7 @@ int main()
 
 		vec3 eye = vec3(sin(currentFrame/2.0f) * boxSize.x, boxSize.y/2.0f, cos(currentFrame/2.0f) * boxSize.z) + (boxSize/2.0f);
 
-		//eye = vec3(boxSize.x, boxSize.y / 2.0f, boxSize.z) + (boxSize / 2.0f);
+		eye = vec3(boxSize.x, boxSize.y / 2.0f, boxSize.z) + (boxSize / 2.0f);
 
 
 		vec3 at(boxSize/2.0f);
