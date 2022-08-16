@@ -1,5 +1,4 @@
 #include "WaterSim.hpp"
-#include "clTypeDefs.hpp"
 #include <glm/gtx/normal.hpp>
 #include "KDTree.hpp"
 
@@ -35,7 +34,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 100000;
+constexpr uint32_t MAX_BALLS = 60000;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -167,23 +166,31 @@ int main()
 
 //Set up opencl memory
 	printf("context status: %i\n", status);
-	cl_command_queue_properties* qProperties = new cl_command_queue_properties();
-	cl_command_queue cmdQueue = clCreateCommandQueueWithProperties(clContext, device, qProperties, &status);
+	cl_command_queue_properties qProperties = CL_QUEUE_PROFILING_ENABLE;
+	//*qProperties = CL_QUEUE_PROFILING_ENABLE;
+
+	cl_command_queue cmdQueue = clCreateCommandQueueWithProperties(clContext, device, &qProperties, &status);
 	printf("cmdqueue status: %i\n", status);
 
-	cl_mem clVelocities = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(fvec3) * MAX_BALLS, NULL, &status);
 
 //shared context buffer
 
-
+	cl_mem clVelocities = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(fvec3) * MAX_BALLS, NULL, &status);
 	fvec4* initialBathPositions = new fvec4[MAX_BALLS](fvec4(0));
 	fvec3* initialBathVelocities = new fvec3[MAX_BALLS](fvec3(0));
 
 
 
+
+
+	uint32_t maxTreeMem = uint32_t(glm::pow(2, glm::ceil(glm::log2(float(MAX_BALLS + 1))))) - 1;
+	cl_mem clKDQueueA = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec3) * maxTreeMem, NULL, &status);
+	cl_mem clKDQueueB = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec3) * maxTreeMem, NULL, &status);
+	cl_mem clTheTree = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(KDNode) * maxTreeMem, NULL, &status);
+
+	cl_mem clTotalList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_BALLS, NULL, &status);
+
 	uint32_t numberOfBalls = 0;
-
-
 
 
 
@@ -209,30 +216,6 @@ int main()
 	}
 
 
-	//for (int x = 0; x < counts.x/2; x++) {
-	//	for (int y = 0; y < (counts.y*3)/4; y++) {
-	//		for (int z = 0; z < counts.z;  z++) {
-	//			if (numberOfBalls < MAX_BALLS) {
-	//				float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
-	//				float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
-	//				float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
-	//				initialBathPositions[numberOfBalls] = (fvec4(xR, yR, zR, 0));
-
-
-	//				//
-	//				//initialBathPositions[numberOfBalls] = fvec4((fvec3(x, y, z) * fvec3(ballRad * 2.0f)), 0.0f);
-
-	//				initialBathVelocities[numberOfBalls] = fvec3(0.0f);
-	//				numberOfBalls++;
-	//			}
-	//		}
-	//	}
-	//}
-
-	
-
-
-
 
 	GLuint ballVBO, ballVAO;
 	glGenVertexArrays(1, &ballVAO);
@@ -251,6 +234,8 @@ int main()
 	printf("aquire gl object status: %i\n", status);
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
 
 
 //read in opencl program and compile
@@ -288,16 +273,23 @@ int main()
 //create the kernels and set memory arguments
 	cl_kernel waterSimKernel = clCreateKernel(program, "watersim", &status);
 	printf("kernal status: %i\n", status);
+	cl_kernel kdTreeKernel = clCreateKernel(program, "makeKDTree", &status);
+	printf("kd kernal status: %i\n", status);
 
+
+
+	KDConstructionContext kdConCon(initialBathPositions, numberOfBalls, clTotalList, clKDQueueA, clKDQueueB, clTheTree, cmdQueue, kdTreeKernel);
 
 
 
 	status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &clPositions);
 	printf("set arg 0 status: %i\n", status);
-	status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &clVelocities);
+	status = clSetKernelArg(waterSimKernel, 1, sizeof(cl_mem), &clVelocities);
 	printf("set arg 1 status: %i\n", status);
 
 
+	status = clSetKernelArg(kdConCon.kdTreeKernel, 0, sizeof(cl_mem), &clPositions);
+	printf("set kd kernel arg 0 status: %i\n", status);
 	
 
 	size_t globalWorkSize[3] = { MAX_BALLS, 1, 1 };
@@ -466,7 +458,7 @@ int main()
 		//printf("43 coords: %s\n", glm::to_string(initialBathPositions[43]).c_str());
 
 		//int32_t lookingIndex = 0;
-		int32_t lookingIndex = 9; //is missing 32 with 60 points
+		int32_t lookingIndex = 2; //is missing 32 with 60 points
 
 		//for (int lookingIndex = 0; lookingIndex < numberOfBalls; lookingIndex++) {
 
@@ -475,18 +467,19 @@ int main()
 		initialBathPositions[lookingIndex].x = currentFrame / 2.0f;
 
 
-		float theRange = 1.0f;
+		float theRange = 3.0f;
 		//printf("\n\n");
-		KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls);
+		KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls, kdConCon);
 		//printf("\n\n");
 		//printTree(theTree);
+		//cin.get();
 		//printf("\n\n");
 		//cin.get();
-		//vector<int32_t> listOfClosePoints = getDotsInRange(initialBathPositions, theTree, lookingIndex, theRange);
-		vector<int32_t> listOfClosePoints = vector<int32_t>();
+		vector<int32_t> listOfClosePoints = getDotsInRange(initialBathPositions, theTree, lookingIndex, theRange);
+		//vector<int32_t> listOfClosePoints = vector<int32_t>();
 		vector<int32_t> manualClosePoints = vector<int32_t>();
 
-		/*fvec3 twentyFourPos = initialBathPositions[lookingIndex].xyz;
+		fvec3 twentyFourPos = initialBathPositions[lookingIndex].xyz;
 		for (int32_t i = 0; i < numberOfBalls; i++) {
 			if (i != lookingIndex) {
 				fvec3 otherPos = initialBathPositions[i];
@@ -500,8 +493,21 @@ int main()
 		std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
 		std::sort(manualClosePoints.begin(), manualClosePoints.end());
 
+		/*printf("manual neighbors:%zu\n", manualClosePoints.size());
+		for (auto k : manualClosePoints) {
+			printf("%i, ", k);
+		}
+		printf("\n");
+		printf("auto neighbors: %zu\n", listOfClosePoints.size());
+		for (auto k : listOfClosePoints) {
+			printf("%i, ", k);
+		}
+		printf("\n");
+
+		cin.get();
 		if (listOfClosePoints.size() != manualClosePoints.size()) {
-			for (uint asdf = 0; asdf < listOfClosePoints.size(); asdf++) {
+			printf("nots ame size");
+			for (uint asdf = 0; asdf < manualClosePoints.size(); asdf++) {
 				if (listOfClosePoints[asdf] != manualClosePoints[asdf]) {
 					printf("looking index: %i\n", lookingIndex);
 					printf("kdneighbors:\n");
@@ -514,9 +520,9 @@ int main()
 						printf("%i, ", k);
 					}
 					printf("\n");
-					cin.get();
 				}
 			}
+			cin.get();
 		}*/
 
 		//}
@@ -548,7 +554,7 @@ int main()
 		}
 		initialBathPositions[lookingIndex].w = 0.69f;
 
-		initialBathPositions[32].w = 0.4f;
+		//initialBathPositions[32].w = 0.4f;
 
 
 		glBindVertexArray(ballVAO);

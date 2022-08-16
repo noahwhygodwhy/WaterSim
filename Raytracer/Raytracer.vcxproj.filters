@@ -66,6 +66,9 @@
     <None Include="waterVert.glsl">
       <Filter>Source Files\glsl</Filter>
     </None>
+    <None Include="QuickSort.cl">
+      <Filter>OpenCL</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Shader.hpp">

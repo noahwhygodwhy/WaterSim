@@ -168,6 +168,7 @@ KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints, const KDCon
 
 	status = clSetKernelArg(kdConCon.kdTreeKernel, 1, sizeof(cl_mem), &kdConCon.clTotalList);
 	//printf("set kd kernel arg 1 status: %i\n", status);
+
 	status = clSetKernelArg(kdConCon.kdTreeKernel, 2, sizeof(cl_mem), &kdConCon.clTree);
 	//printf("set kd kernel arg 2 status: %i\n", status);
 
@@ -182,23 +183,54 @@ KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints, const KDCon
 	//printf("total layer: %i\n", totalLayers);
 
 	for (int i = 0; i < totalLayers - cpuLayers; i++) {
-		
+		//printf("i: %i\n", i);
+		//if (i % 2 == 1) {
+
+		//	status = clSetKernelArg(kdConCon.kdTreeKernel, 3 , sizeof(cl_mem), &kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
+		//	status = clSetKernelArg(kdConCon.kdTreeKernel, 4 , sizeof(cl_mem), &kdConCon.clQB);
+		//}
+		//else {
+		//	status = clSetKernelArg(kdConCon.kdTreeKernel, 3, sizeof(cl_mem), &kdConCon.clQB);//qa is input on even, output on odd, (kernel args 3 and 4)
+		//	status = clSetKernelArg(kdConCon.kdTreeKernel, 4, sizeof(cl_mem), &kdConCon.clQA);
+		//}
 		status = clSetKernelArg(kdConCon.kdTreeKernel, 3+(i%2), sizeof(cl_mem), &kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
+		//printf("set kd kernel arg %i status: %i\n", 3 + (i % 2),status);
 		status = clSetKernelArg(kdConCon.kdTreeKernel, 3+((i+1)%2), sizeof(cl_mem), &kdConCon.clQB);
+		//printf("set kd kernel arg %i status: %i\n", 3 + ((i + 1) % 2),status);
 
 
 		size_t globalWorkSize[3] = { glm::pow(2, i+cpuLayers), 1, 1 };
+		size_t localWorkSize[3] = { 1024, 1, 1 };
+		//printf("global work size: %zu, %zu, %zu\n", globalWorkSize[0], globalWorkSize[1], globalWorkSize[2]);
 
 
-
-
-		//enqueue a sorting kernel for each input to sort it
 
 		clFinish(kdConCon.cmdQueue);
-		status = clEnqueueNDRangeKernel(kdConCon.cmdQueue, kdConCon.kdTreeKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
+		status = clEnqueueNDRangeKernel(kdConCon.cmdQueue, kdConCon.kdTreeKernel, 1, NULL, globalWorkSize, localWorkSize, 0, NULL, kernelEvent);
+		//printf("clEnqueueNDRangeKernel status: %i\n", status); 
 		clWaitForEvents(1, kernelEvent);
 
-		
+		/*clEnqueueReadBuffer(kdConCon.cmdQueue, kdConCon.clTotalList, CL_TRUE, 0, sizeof(int32_t)* numberOfPoints, totalList, 0, NULL, NULL);
+
+		for (int f = 0; f < numberOfPoints; f++) {
+			printf("%i: %u: %s\n", f, totalList[f], glm::to_string(balls[totalList[f]]).c_str());
+		}*/
+		//cin.get();
+
+
+
+		/*cl_ulong time_start;
+		cl_ulong time_end;
+
+		status = clGetEventProfilingInfo(kernelEvent[0], CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
+		printf("get start status: %i\n", status);
+		status = clGetEventProfilingInfo(kernelEvent[0], CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
+		printf("get end status: %i\n", status);
+
+		cl_ulong nanoSeconds = time_end - time_start;
+		printf("OpenCl Execution time is: %zu milliseconds \n", (nanoSeconds / 1000000));
+		printf("OpenCl Execution time is: %zu seconds \n", (nanoSeconds / 1000000000));
+*/		//printf("\n\n======================\n");
 	}
 	clFinish(kdConCon.cmdQueue);
 

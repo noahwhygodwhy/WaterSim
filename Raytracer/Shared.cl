@@ -27,6 +27,13 @@ STRUCT_HEADER OtherData {
     float3 gravity;
 } OtherData;
 
+STRUCT_HEADER KDNode {
+	float value;
+	unsigned int pointIdx; //index into balls
+	int greaterChild; //index into the tree
+	int lesserChild;//index into the tree
+};
+
 
 
 #endif

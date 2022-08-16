@@ -153,6 +153,7 @@
   <ItemGroup>
     <None Include="boxFrag.glsl" />
     <None Include="packages.config" />
+    <None Include="QuickSort.cl" />
     <None Include="rand.cl" />
     <None Include="Shared.cl" />
     <None Include="waterFrag.glsl" />
