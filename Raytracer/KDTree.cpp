@@ -276,6 +276,7 @@ vector<int32_t> getDotsInRange(const fvec4* balls, KDNode* theTree, uint32_t ori
 
 	while (!printQueue.empty()) {
 		numberVisited++;
+
 		uint32_t currIdx = printQueue.front();
 		KDNode currNode = theTree[currIdx-1];
 		printQueue.pop();

@@ -4,14 +4,15 @@
 
 
 
-__kernel void watersim(
-    __global float3* positions,
-    __global float3* velocities
-    )  {
-    int idx = get_global_id(0);    
-}
+
+//TODO: https://www.diva-portal.org/smash/get/diva2:703754/FULLTEXT01.pdf 
+
+//page 29
 
 
+
+const float NEIGHBOR_RADIUS = 2.0f;
+const float NEIGHBOR_RADIUS_SQUARED = 4.0f;
 
 float indexF3(float3 a, int index) {
     switch(index) {
@@ -21,6 +22,113 @@ float indexF3(float3 a, int index) {
     }
 }
 
+float distance_squared(float3 a, float3 b) {
+    float3 c = a-b;
+    return (c.x*c.x)+(c.y+c.y)+(c.z*c.z);
+}
+
+
+__kernel void computeDP(
+    __global float3* positions,
+    __global float3* velocities,
+    __global float* densities,
+    __global float* pressures,
+    __global struct KDNode* theTree,
+    float deltaTime
+    )  {
+    int idx = get_global_id(0);
+
+    if(idx != 2) {
+        return;
+    }
+    velocities[idx] = (float3)(0.0, 0.0, 1.0);
+    int currIdx = 1;
+    float3 theBall = positions[idx];
+
+    
+    //you can backtrack cause its stored implicitly, you can math the parent node, and
+    //choose to ignore children
+
+    uint lesserTraversals = 0;
+    uint greaterTraversals = 0;
+
+    while(currIdx > 0) { //or while(true)???
+		struct KDNode currNode = theTree[currIdx-1];
+		int layer = (int)(floor(log2((float)(currIdx))));
+		int axis = layer % 3;
+        float dsquared = distance_squared(theBall, positions[currNode.pointIdx]);
+        if ( (dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx)) {
+                float distance = sqrt(dsquared);
+                velocities[currIdx-1] = (float3)(1.0, 1.0, 0.0);//temp
+                //DO CALCULATIONS INVOLVING NEIGHBORS HERE
+            }
+
+        float val = indexF3(theBall, axis);
+		int tooCloseToCall = fabs(val - currNode.value) <= NEIGHBOR_RADIUS;
+
+		int possiblyGreater = tooCloseToCall || (val > currNode.value);
+		int possiblyLesser = tooCloseToCall || (val < currNode.value);
+
+        int goingLesser = possiblyLesser && !(1&lesserTraversals);
+        int goingGreater = !goingLesser && possiblyGreater && !(1&greaterTraversals);
+        int goingParent = !goingLesser && !goingGreater;
+
+        lesserTraversals = lesserTraversals<<(goingGreater||goingLesser);
+        greaterTraversals = greaterTraversals<<(goingGreater||goingLesser);
+        lesserTraversals = lesserTraversals>>goingParent;
+        greaterTraversals = greaterTraversals>>goingParent;
+
+        currIdx = (goingLesser*currNode.lesserChild) + 
+        (goingGreater*currNode.greaterChild) + 
+        (goingParent*(currIdx/2));
+
+
+        // if(possiblyLesser && !(1&lesserTraversals)) {
+        //     lesserTraversals &= 1;
+        //     lesserTraversals = lesserTraversals<<1;
+        //     greaterTraversals = greaterTraversals<<1;
+        //     currIdx = currNode.lesserChild;
+        // } 
+        // else 
+        // if(possiblyGreater && !(1&greaterTraversals)) {
+        //     greaterTraversals &= 1;
+        //     lesserTraversals = lesserTraversals<<1;
+        //     greaterTraversals = greaterTraversals<<1;
+        //     currIdx = currNode.greaterChild;
+        // }
+        // else {
+        //     currIdx = currIdx/2;
+        //     lesserTraversals = lesserTraversals>>1;
+        //     greaterTraversals = greaterTraversals>>1;
+        // }
+
+
+    }
+
+    positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
+}
+
+// __kernel void compute(
+//     __global float3* positions,
+//     //__global float3* velocities,
+//     __global float* densities,
+//     __global float* pressures,
+//     __global struct KDNode* theTree,
+//     float deltaTime
+//     )  {
+//     int idx = get_global_id(0);   
+
+//     positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
+// }
+
+
+
+
+
+
+
+
+
 
 
 void gSwap(__global unsigned int* a, __global unsigned int* b) {
@@ -28,10 +136,6 @@ void gSwap(__global unsigned int* a, __global unsigned int* b) {
     *a = *b;
     *b = t;
 }
-
-
-
-
 
 //https://en.wikipedia.org/wiki/Bitonic_sorter
 void bitonicSort(

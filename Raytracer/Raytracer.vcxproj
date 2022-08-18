@@ -146,14 +146,12 @@
   <ItemGroup>
     <ClCompile Include="glad.c" />
     <ClCompile Include="KDTree.cpp" />
-    <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="WaterSim.cpp" />
     <ClCompile Include="Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="boxFrag.glsl" />
     <None Include="packages.config" />
-    <None Include="QuickSort.cl" />
     <None Include="rand.cl" />
     <None Include="Shared.cl" />
     <None Include="waterFrag.glsl" />
@@ -164,7 +162,6 @@
   <ItemGroup>
     <ClInclude Include="KDTree.hpp" />
     <ClInclude Include="opencl.hpp" />
-    <ClInclude Include="ThreadPool.hpp" />
     <ClInclude Include="WaterSim.hpp" />
     <ClInclude Include="glad.h" />
     <ClInclude Include="Shader.hpp" />

@@ -39,9 +39,6 @@
     <ClCompile Include="KDTree.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ThreadPool.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -66,9 +63,6 @@
     <None Include="waterVert.glsl">
       <Filter>Source Files\glsl</Filter>
     </None>
-    <None Include="QuickSort.cl">
-      <Filter>OpenCL</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Shader.hpp">
@@ -90,9 +84,6 @@
       <Filter>Header Files\external</Filter>
     </ClInclude>
     <ClInclude Include="KDTree.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ThreadPool.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -470,6 +470,7 @@ int main()
 		float theRange = 3.0f;
 		//printf("\n\n");
 		KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls, kdConCon);
+
 		//printf("\n\n");
 		//printTree(theTree);
 		//cin.get();
@@ -493,19 +494,19 @@ int main()
 		std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
 		std::sort(manualClosePoints.begin(), manualClosePoints.end());
 
-		/*printf("manual neighbors:%zu\n", manualClosePoints.size());
-		for (auto k : manualClosePoints) {
+		printf("manual neighbors:%zu\n", manualClosePoints.size());
+		/*for (auto k : manualClosePoints) {
 			printf("%i, ", k);
 		}
-		printf("\n");
+		printf("\n");*/
 		printf("auto neighbors: %zu\n", listOfClosePoints.size());
-		for (auto k : listOfClosePoints) {
+		/*for (auto k : listOfClosePoints) {
 			printf("%i, ", k);
 		}
-		printf("\n");
+		printf("\n");*/
 
-		cin.get();
-		if (listOfClosePoints.size() != manualClosePoints.size()) {
+		//cin.get();
+		/*if (listOfClosePoints.size() != manualClosePoints.size()) {
 			printf("nots ame size");
 			for (uint asdf = 0; asdf < manualClosePoints.size(); asdf++) {
 				if (listOfClosePoints[asdf] != manualClosePoints[asdf]) {
