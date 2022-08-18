@@ -47,7 +47,7 @@ void printTree(KDNode* theTree) {
 
 
 
-KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon) {
+KDNode* makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon) {
 	uint32_t* totalList = new uint32_t[numberOfPoints];
 	for (uint32_t i = 0; i < numberOfPoints; i++) {
 		totalList[i] = i;	
@@ -86,7 +86,7 @@ KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints, const KDCon
 		int greaterChildIdx = -1;
 
 		auto mySert = [balls, axis](size_t a, size_t b) {
-			return balls[a][axis] < balls[b][axis];
+			return balls[a].position[axis] < balls[b].position[axis];
 		};
 
 		sort(totalList + startingIdx, totalList + endingIdx + 1, mySert);
@@ -102,7 +102,7 @@ KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints, const KDCon
 
 
 		theTree[treeIdx - 1] = KDNode(
-			balls[totalList[middleIdx]][axis],
+			balls[totalList[middleIdx]].position[axis],
 			totalList[middleIdx],
 			greaterChildIdx - 1,
 			lesserChildIdx - 1
@@ -251,7 +251,7 @@ bool dbg = false;
 
 
 
-vector<int32_t> getDotsInRange(const fvec4* balls, KDNode* theTree, uint32_t originDot, float range) {
+vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint32_t originDot, float range) {
 
 	int maxLayer = 0;
 	int numberVisited = 0;
@@ -267,7 +267,7 @@ vector<int32_t> getDotsInRange(const fvec4* balls, KDNode* theTree, uint32_t ori
 
 	vector<int32_t> outputVector = vector<int32_t>();
 
-	fvec4 theBall = balls[originDot];
+	fvec3 theBall = particles[originDot].position;
 
 
 	if (dbg)printf("origin: %s\n", glm::to_string(theBall).c_str());
@@ -286,7 +286,7 @@ vector<int32_t> getDotsInRange(const fvec4* balls, KDNode* theTree, uint32_t ori
 		maxLayer = glm::max(maxLayer, layer);
 		int axis = layer % 3;
 
-		float dsquared = distance2(fvec3(theBall.xyz), fvec3(balls[currNode.pointIdx].xyz));
+		float dsquared = distance2(theBall, particles[currNode.pointIdx].position);
 
 		if ( (dsquared <= rquared) && (currNode.pointIdx != originDot)) {
 			outputVector.push_back(currNode.pointIdx);

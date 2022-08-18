@@ -37,8 +37,8 @@ STRUCT_HEADER Particle {
     float3 position;
     float3 velocity;
     float3 density;
-    float3 preasure;
-}
+    float3 pressure;
+};
 
 
 

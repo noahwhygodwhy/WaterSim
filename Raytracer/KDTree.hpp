@@ -35,7 +35,7 @@ enum Axis {
 
 
 struct KDConstructionContext {
-	const fvec4* balls;
+	const Particle* particles;
 	const size_t numberOfPoints;
 	cl_mem clTotalList;
 	cl_mem clQA;
@@ -50,9 +50,9 @@ struct KDConstructionContext {
 void printTree(KDNode* theTree);
 
 
-KDNode* makeKDTree(const fvec4* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon);
+KDNode* makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon);
 
-vector<int32_t> getDotsInRange(const fvec4* balls, KDNode* theTree, uint32_t originDot, float range);
+vector<int32_t> getDotsInRange(const Particle* balls, KDNode* theTree, uint32_t originDot, float range);
 
 
 

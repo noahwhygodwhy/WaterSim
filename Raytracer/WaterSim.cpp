@@ -34,7 +34,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_BALLS = 60000;
+constexpr uint32_t MAX_PARTICLES = 60000;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -175,20 +175,14 @@ int main()
 
 //shared context buffer
 
-	cl_mem clVelocities = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(fvec3) * MAX_BALLS, NULL, &status);
-	fvec4* initialBathPositions = new fvec4[MAX_BALLS](fvec4(0));
-	fvec3* initialBathVelocities = new fvec3[MAX_BALLS](fvec3(0));
+	Particle* initialParticles = new Particle[MAX_PARTICLES]();
 
-
-
-
-
-	uint32_t maxTreeMem = uint32_t(glm::pow(2, glm::ceil(glm::log2(float(MAX_BALLS + 1))))) - 1;
+	uint32_t maxTreeMem = uint32_t(glm::pow(2, glm::ceil(glm::log2(float(MAX_PARTICLES + 1))))) - 1;
 	cl_mem clKDQueueA = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec3) * maxTreeMem, NULL, &status);
 	cl_mem clKDQueueB = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec3) * maxTreeMem, NULL, &status);
 	cl_mem clTheTree = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(KDNode) * maxTreeMem, NULL, &status);
 
-	cl_mem clTotalList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_BALLS, NULL, &status);
+	cl_mem clTotalList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_PARTICLES, NULL, &status);
 
 	uint32_t numberOfBalls = 0;
 
@@ -200,37 +194,44 @@ int main()
 
 
 
-	for (int i = 0; i < MAX_BALLS; i++) {
+	for (int i = 0; i < MAX_PARTICLES; i++) {
 		float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
 		float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
 		float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
-		initialBathPositions[numberOfBalls] = (fvec4(xR, yR, zR, 0));
 
+		initialParticles[numberOfBalls] = Particle(
+			(fvec3(xR, yR, zR)),
+			fvec3(0.0f),
+			fvec3(0.0f),
+			fvec3(0.0f)
+		);
 
-		//
-		//initialBathPositions[numberOfBalls] = fvec4((fvec3(x, y, z) * fvec3(ballRad * 2.0f)), 0.0f);
-
-		initialBathVelocities[numberOfBalls] = fvec3(0.0f);
 		numberOfBalls++;
 		
 	}
 
 
 
-	GLuint ballVBO, ballVAO;
-	glGenVertexArrays(1, &ballVAO);
-	glBindVertexArray(ballVAO);
-	glGenBuffers(1, &ballVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(fvec4) * MAX_BALLS, initialBathPositions, GL_STATIC_DRAW);
+	GLuint particleVBO, particleVAO;
+	glGenVertexArrays(1, &particleVAO);
+	glBindVertexArray(particleVAO);
+	glGenBuffers(1, &particleVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * MAX_PARTICLES, initialParticles, GL_STATIC_DRAW);
 
 
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)offsetof(Particle, position));
 	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)offsetof(Particle, velocity));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)offsetof(Particle, density));
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)offsetof(Particle, pressure));
+	glEnableVertexAttribArray(3);
 
-	cl_mem clPositions = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, ballVBO, &status);
+	cl_mem clParticles = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, particleVBO, &status);
 	printf("positions clmem from VBO: %i\n", status);
-	status = clEnqueueAcquireGLObjects(cmdQueue, 1, &clPositions, 0, NULL, NULL);
+	status = clEnqueueAcquireGLObjects(cmdQueue, 1, &clParticles, 0, NULL, NULL);
 	printf("aquire gl object status: %i\n", status);
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -278,21 +279,18 @@ int main()
 
 
 
-	KDConstructionContext kdConCon(initialBathPositions, numberOfBalls, clTotalList, clKDQueueA, clKDQueueB, clTheTree, cmdQueue, kdTreeKernel);
+	KDConstructionContext kdConCon(initialParticles, numberOfBalls, clTotalList, clKDQueueA, clKDQueueB, clTheTree, cmdQueue, kdTreeKernel);
 
 
 
-	status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &clPositions);
+	status = clSetKernelArg(waterSimKernel, 0, sizeof(cl_mem), &clParticles);
 	printf("set arg 0 status: %i\n", status);
-	status = clSetKernelArg(waterSimKernel, 1, sizeof(cl_mem), &clVelocities);
-	printf("set arg 1 status: %i\n", status);
 
-
-	status = clSetKernelArg(kdConCon.kdTreeKernel, 0, sizeof(cl_mem), &clPositions);
+	status = clSetKernelArg(kdConCon.kdTreeKernel, 0, sizeof(cl_mem), &clParticles);
 	printf("set kd kernel arg 0 status: %i\n", status);
 	
 
-	size_t globalWorkSize[3] = { MAX_BALLS, 1, 1 };
+	size_t globalWorkSize[3] = { MAX_PARTICLES, 1, 1 };
 	size_t localWorkSize[3] = { NULL, NULL, NULL };
 
 	Shader boxShader("boxVert.glsl", "boxFrag.glsl");
@@ -305,9 +303,7 @@ int main()
 
 
 
-	status = clEnqueueWriteBuffer(cmdQueue, clPositions, CL_TRUE, 0, sizeof(fvec3) * MAX_BALLS, initialBathPositions, 0, NULL, NULL);
-	printf("write 0 status: %i\n", status);
-	status = clEnqueueWriteBuffer(cmdQueue, clVelocities, CL_TRUE, 0, sizeof(fvec3) * MAX_BALLS, initialBathVelocities, 0, NULL, NULL);
+	status = clEnqueueWriteBuffer(cmdQueue, clParticles, CL_TRUE, 0, sizeof(Particle) * MAX_PARTICLES, initialParticles, 0, NULL, NULL);
 	printf("write 0 status: %i\n", status);
 
 	
@@ -444,7 +440,7 @@ int main()
 
 
 
-		glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
+		glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
 		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec4) * numberOfBalls, readInPositions);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -462,28 +458,28 @@ int main()
 
 		//for (int lookingIndex = 0; lookingIndex < numberOfBalls; lookingIndex++) {
 
-		initialBathPositions[lookingIndex].z = boxSize.z-( currentFrame / 2.0f);
-		initialBathPositions[lookingIndex].y = currentFrame / 2.0f;
-		initialBathPositions[lookingIndex].x = currentFrame / 2.0f;
+		initialParticles[lookingIndex].position.z = boxSize.z-( currentFrame / 2.0f);
+		initialParticles[lookingIndex].position.y = currentFrame / 2.0f;
+		initialParticles[lookingIndex].position.x = currentFrame / 2.0f;
 
 
 		float theRange = 3.0f;
 		//printf("\n\n");
-		KDNode* theTree = makeKDTree(initialBathPositions, numberOfBalls, kdConCon);
+		KDNode* theTree = makeKDTree(initialParticles, numberOfBalls, kdConCon);
 
 		//printf("\n\n");
 		//printTree(theTree);
 		//cin.get();
 		//printf("\n\n");
 		//cin.get();
-		vector<int32_t> listOfClosePoints = getDotsInRange(initialBathPositions, theTree, lookingIndex, theRange);
+		vector<int32_t> listOfClosePoints = getDotsInRange(initialParticles, theTree, lookingIndex, theRange);
 		//vector<int32_t> listOfClosePoints = vector<int32_t>();
 		vector<int32_t> manualClosePoints = vector<int32_t>();
 
-		fvec3 twentyFourPos = initialBathPositions[lookingIndex].xyz;
+		fvec3 twentyFourPos = initialParticles[lookingIndex].position.xyz;
 		for (int32_t i = 0; i < numberOfBalls; i++) {
 			if (i != lookingIndex) {
-				fvec3 otherPos = initialBathPositions[i];
+				fvec3 otherPos = initialParticles[i].position;
 				float d = glm::distance(twentyFourPos, otherPos);
 				if (d <= theRange) {
 					manualClosePoints.push_back(i);
@@ -491,15 +487,20 @@ int main()
 			}
 		}
 
-		std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
-		std::sort(manualClosePoints.begin(), manualClosePoints.end());
+		//std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
+		//std::sort(manualClosePoints.begin(), manualClosePoints.end());
 
-		printf("manual neighbors:%zu\n", manualClosePoints.size());
+		if (manualClosePoints.size() != listOfClosePoints.size()) {
+
+			printf("manual neighbors:%zu\n", manualClosePoints.size());
+			printf("auto neighbors: %zu\n", listOfClosePoints.size());
+			cin.get();
+		}
+
 		/*for (auto k : manualClosePoints) {
 			printf("%i, ", k);
 		}
 		printf("\n");*/
-		printf("auto neighbors: %zu\n", listOfClosePoints.size());
 		/*for (auto k : listOfClosePoints) {
 			printf("%i, ", k);
 		}
@@ -547,20 +548,22 @@ int main()
 
 
 		for (int32_t i = 0; i < numberOfBalls; i++) {
-			initialBathPositions[i].w = 0.0f;
+			initialParticles[i].velocity = fvec3(0, 0, 1);
+
 		}
 
 		for (int32_t k : listOfClosePoints) {
-			initialBathPositions[k].w = 1.0f;
+
+			initialParticles[k].velocity = fvec3(1, 0, 1);
 		}
-		initialBathPositions[lookingIndex].w = 0.69f;
+		initialParticles[lookingIndex].velocity = fvec3(0, 1, 0);
 
 		//initialBathPositions[32].w = 0.4f;
 
 
-		glBindVertexArray(ballVAO);
-		glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(fvec4)* MAX_BALLS, initialBathPositions, GL_STATIC_DRAW);
+		glBindVertexArray(particleVAO);
+		glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(Particle)* MAX_PARTICLES, initialParticles, GL_STATIC_DRAW);
 
 		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -624,8 +627,8 @@ int main()
 		waterShader.setMatFour("view", view);
 		waterShader.setMatFour("projection", proj);
 
-		glBindVertexArray(ballVAO);
-		glDrawArrays(GL_POINTS, 0, MAX_BALLS);
+		glBindVertexArray(particleVAO);
+		glDrawArrays(GL_POINTS, 0, MAX_PARTICLES);
 		glBindVertexArray(0);
 
 
