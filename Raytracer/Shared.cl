@@ -34,10 +34,10 @@ STRUCT_HEADER KDNode {
 	int lesserChild;//index into the tree
 };
 STRUCT_HEADER Particle {
-    float3 position;
-    float3 velocity;
-    float3 density;
-    float3 pressure;
+    float4 position;
+    float4 velocity;
+    float4 density;
+    float4 pressure;
 };
 
 

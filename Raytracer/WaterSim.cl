@@ -6,17 +6,29 @@
 
 // page 29
 
-const float NEIGHBOR_RADIUS = 2.0f;
-const float NEIGHBOR_RADIUS_SQUARED = 4.0f;
+const float NEIGHBOR_RADIUS = 3.0f;
+const float NEIGHBOR_RADIUS_SQUARED = 9.0f;
 
 float indexF3(float3 a, int index) {
-  switch (index) {
-  case 0:
-    return a.x;
-  case 1:
-    return a.y;
-  default:
-    return a.z;
+    switch (index) {
+    case 0:
+        return a.x;
+    case 1:
+        return a.y;
+    default:
+        return a.z;
+    }
+}
+float indexF4(__global float4* a, int index) {
+    switch (index) {
+    case 0:
+        return a->x;
+    case 1:
+        return a->y;
+    case 2:
+        return a->z;
+    default:
+        return a->w;
   }
 }
 
@@ -25,74 +37,99 @@ float distance_squared(float3 a, float3 b) {
   return (c.x * c.x) + (c.y + c.y) + (c.z * c.z);
 }
 
-__kernel void computeDP(__global struct Particle *particles,
-                        __global struct KDNode *theTree, float deltaTime) {
+__kernel void computeDP(
+    __global struct Particle *particles,
+    __global struct KDNode *theTree, 
+    float deltaTime) {
 
-  int idx = get_global_id(0);
+    int idx = get_global_id(0);
+    //particles[idx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);
+    //return;
 
-  if (idx != 2) {
-    return;
-  }
-  particles[idx].velocity = (float3)(0.0, 0.0, 1.0);
-  uint currIdx = 1;
-  float3 theBall = particles[idx].position;
+    particles[idx].velocity = (float4)(0.0, 0.0, 1.0, 0.0);
 
-  // you can backtrack cause its stored implicitly, you can math the parent
-  // node, and choose to ignore children
-
-  uint lesserTraversals = 0;
-  uint greaterTraversals = 0;
-
-  while (currIdx > 0) { // or while(true)???
-    struct KDNode currNode = theTree[currIdx - 1];
-    int layer = (int)(floor(log2((float)(currIdx))));
-    int axis = layer % 3;
-    float dsquared =
-        distance_squared(theBall, particles[currNode.pointIdx].position);
-    if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx)) {
-      float distance = sqrt(dsquared);
-      particles[currIdx - 1].velocity = (float3)(1.0, 1.0, 0.0); // temp
-      // DO CALCULATIONS INVOLVING NEIGHBORS HERE
+    if (idx != 2) {
+        return;
     }
+    particles[idx].velocity = (float4)(1.0, 0.0, 0.0, 0.0);
+    uint currIdx = 1;
+    float3 theBall = particles[idx].position.xyz;
 
-    float val = indexF3(theBall, axis);
-    int tooCloseToCall = fabs(val - currNode.value) <= NEIGHBOR_RADIUS;
+    // you can backtrack cause its stored implicitly, you can math the parent
+    // node, and choose to ignore children
 
-    int possiblyGreater = tooCloseToCall || (val > currNode.value);
-    int possiblyLesser = tooCloseToCall || (val < currNode.value);
+    uint lesserTraversals = 0;
+    uint greaterTraversals = 0;
 
-    int goingLesser = possiblyLesser && !(1 & lesserTraversals);
-    int goingGreater = !goingLesser && possiblyGreater && !(1 & greaterTraversals);
-    int goingParent = !goingLesser && !goingGreater;
+    int traveledNodes = 0;
 
-    lesserTraversals = lesserTraversals << (goingGreater || goingLesser);
-    greaterTraversals = greaterTraversals << (goingGreater || goingLesser);
-    lesserTraversals = lesserTraversals >> goingParent;
-    greaterTraversals = greaterTraversals >> goingParent;
-
-    currIdx = (goingLesser * currNode.lesserChild) +
-              (goingGreater * currNode.greaterChild) +
-              (goingParent * (currIdx >> 1));
-
-    // if(possiblyLesser && !(1&lesserTraversals)) {
-    //     lesserTraversals &= 1;
-    //     lesserTraversals = lesserTraversals<<1;
-    //     greaterTraversals = greaterTraversals<<1;
-    //     currIdx = currNode.lesserChild;
+    // for(int i = 0; i < 60; i++) {
+    //     struct KDNode c = theTree[i];
+    //     printf("i: %i, idx: %u, V: %f, L: %i, R: %i\n", i, c.pointIdx, c.value, c.greaterChild, c.lesserChild);
     // }
-    // else
-    // if(possiblyGreater && !(1&greaterTraversals)) {
-    //     greaterTraversals &= 1;
-    //     lesserTraversals = lesserTraversals<<1;
-    //     greaterTraversals = greaterTraversals<<1;
-    //     currIdx = currNode.greaterChild;
-    // }
-    // else {
-    //     currIdx = currIdx/2;
-    //     lesserTraversals = lesserTraversals>>1;
-    //     greaterTraversals = greaterTraversals>>1;
-    // }
-  }
+
+    // return;
+
+    
+    while (currIdx > 0) { // or while(true)???
+        //printf("currIdx: %i\n", currIdx);
+        //printf("traveledNodes: %i\n", traveledNodes);
+        //traveledNodes++;
+        printf("visiting tree index %u\n", currIdx);
+        struct KDNode currNode = theTree[currIdx - 1];
+
+        int layer = (int)(floor(log2((float)(currIdx))));
+        int axis = layer % 3;
+        float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
+        if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx)) {
+            float distance = sqrt(dsquared);
+            printf("neighbor: %i, \n", currNode.pointIdx);
+            particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0); // temp
+        // DO CALCULATIONS INVOLVING NEIGHBORS HERE
+        }
+
+
+        float val = indexF3(theBall, axis);
+        int tooCloseToCall = fabs(val - currNode.value) <= NEIGHBOR_RADIUS;
+
+        int possiblyGreater = tooCloseToCall || (val > currNode.value);
+        int possiblyLesser = tooCloseToCall || (val < currNode.value);
+        //printf("%f, %f\n",val, currNode.value);
+        //printf("%u, %u, %i, %u\n", lesserTraversals, greaterTraversals, possiblyGreater, possiblyLesser);
+
+        int goingLesser = possiblyLesser && !(1 & lesserTraversals);
+        int goingGreater = !goingLesser && possiblyGreater && !(1 & greaterTraversals);
+        int goingParent = !goingLesser && !goingGreater;
+
+        lesserTraversals = lesserTraversals << (goingGreater || goingLesser);
+        greaterTraversals = greaterTraversals << (goingGreater || goingLesser);
+        lesserTraversals = lesserTraversals >> goingParent;
+        greaterTraversals = greaterTraversals >> goingParent;
+
+        currIdx = (goingLesser * (currNode.lesserChild+1)) +
+                (goingGreater * (currNode.greaterChild+1)) +
+                (goingParent * (currIdx >> 1));
+        //printf("%i, %i, %i, %u\n", goingLesser, goingGreater, goingParent, currIdx);
+
+        // if(possiblyLesser && !(1&lesserTraversals)) {
+        //     lesserTraversals &= 1;
+        //     lesserTraversals = lesserTraversals<<1;
+        //     greaterTraversals = greaterTraversals<<1;
+        //     currIdx = currNode.lesserChild;
+        // }
+        // else
+        // if(possiblyGreater && !(1&greaterTraversals)) {
+        //     greaterTraversals &= 1;
+        //     lesserTraversals = lesserTraversals<<1;
+        //     greaterTraversals = greaterTraversals<<1;
+        //     currIdx = currNode.greaterChild;
+        // }
+        // else {
+        //     currIdx = currIdx/2;
+        //     lesserTraversals = lesserTraversals>>1;
+        //     greaterTraversals = greaterTraversals>>1;
+        // }
+    }
 
   // positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
 }
@@ -136,8 +173,8 @@ void bitonicSort(int start, int end, int axis,
 
         if (l > i) {
           if (!(((i & k) == 0) ^
-                (indexF3(particles[totalList[i]].position, axis) >
-                 indexF3(particles[totalList[l]].position, axis)))) {
+                (indexF4(&particles[totalList[i]].position, axis) >
+                 indexF4(&particles[totalList[l]].position, axis)))) {
             gSwap(totalList + i, totalList + l);
           }
         }
@@ -148,8 +185,10 @@ void bitonicSort(int start, int end, int axis,
 
 __kernel void makeKDTree(__global struct Particle *particles,
                          __global unsigned int *totalList,
-                         __global struct KDNode *theTree, __global int3 *input,
-                         __global int3 *output, int inputCount) {
+                         __global struct KDNode *theTree, 
+                         __global int3 *input,
+                         __global int3 *output, 
+                         int inputCount) {
   int idx = get_global_id(0);
 
   int3 curr = input[idx];
@@ -177,7 +216,7 @@ __kernel void makeKDTree(__global struct Particle *particles,
   lesserChildIdx = (((treeIdx << 1) + 1) * hasGreater) + (noGreater * -1);
 
   struct KDNode nodeToAdd = {
-      indexF3(particles[totalList[middleIdx]].position, axis),
+      indexF4(&particles[totalList[middleIdx]].position, axis),
       totalList[middleIdx], greaterChildIdx - 1, lesserChildIdx - 1};
   theTree[treeIdx - 1] = nodeToAdd;
 }

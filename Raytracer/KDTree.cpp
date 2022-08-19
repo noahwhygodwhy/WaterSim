@@ -47,7 +47,11 @@ void printTree(KDNode* theTree) {
 
 
 
-KDNode* makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon) {
+void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon) {
+
+
+	cl_int status; 
+	
 	uint32_t* totalList = new uint32_t[numberOfPoints];
 	for (uint32_t i = 0; i < numberOfPoints; i++) {
 		totalList[i] = i;	
@@ -130,12 +134,19 @@ KDNode* makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KD
 
 	int totalLayers = glm::ceil(glm::log2(float(numberOfPoints)))+1;
 
-	int numberOfEvents = 3;
-	cl_event* writeEvents = new cl_event[numberOfEvents]();
-	clEnqueueWriteBuffer(kdConCon.cmdQueue, kdConCon.clTotalList, CL_FALSE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, &writeEvents[0]);
-	clEnqueueWriteBuffer(kdConCon.cmdQueue, kdConCon.clTree, CL_FALSE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, &writeEvents[1]);
-	clEnqueueWriteBuffer(kdConCon.cmdQueue, kdConCon.clQA, CL_FALSE, 0, sizeof(ivec3)* numberOfStartingInputs, tempInput, 0, NULL, &writeEvents[2]);
-	clWaitForEvents(numberOfEvents, writeEvents);
+	cl_event* writeEvents = new cl_event[3]();
+	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clTotalList, CL_FALSE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, &writeEvents[0]);
+	if (status)printf("kd write 1 %i\n", status);
+
+	//printf("\n%p, %p, %i, %p, %p\n\n", &kdConCon.cmdQueue, &kdConCon.clTheTree, memForTree, theTree, &writeEvents[1]);
+
+
+	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_FALSE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, &writeEvents[1]);
+	if (status)printf("kd write 2 %i\n", status);
+
+	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clQA, CL_FALSE, 0, sizeof(ivec3)* numberOfStartingInputs, tempInput, 0, NULL, &writeEvents[2]);
+	if (status)printf("kd write 3 %i\n", status);
+	clWaitForEvents(3, writeEvents);
 
 	/*printf("total list pre anything:\n");
 	clEnqueueReadBuffer(kdConCon.cmdQueue, kdConCon.clTotalList, CL_TRUE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, NULL);
@@ -164,51 +175,47 @@ KDNode* makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KD
 
 
 
-	cl_int status;
-
-	status = clSetKernelArg(kdConCon.kdTreeKernel, 1, sizeof(cl_mem), &kdConCon.clTotalList);
+	status = clSetKernelArg(*kdConCon.kdTreeKernel, 1, sizeof(cl_mem), kdConCon.clTotalList);
+	if (status)printf("kd kernel 1 %i\n", status);
 	//printf("set kd kernel arg 1 status: %i\n", status);
-	status = clSetKernelArg(kdConCon.kdTreeKernel, 2, sizeof(cl_mem), &kdConCon.clTree);
+	//status = clSetKernelArg(kdConCon.kdTreeKernel, 2, sizeof(cl_mem), &kdConCon.clTree);
 	//printf("set kd kernel arg 2 status: %i\n", status);
 
 
 	int smolNumberOfPoints = int(numberOfPoints);
 
-	status = clSetKernelArg(kdConCon.kdTreeKernel, 5, sizeof(int), &smolNumberOfPoints);
+	status = clSetKernelArg(*kdConCon.kdTreeKernel, 5, sizeof(int), &smolNumberOfPoints);
+	if (status)printf("kd kernel 5 %i\n", status);
 	//printf("set kd kernel arg 5 status: %i\n", status);
 
-
+	//printf("total layers: %i \n", totalLayers);
 	cl_event* kernelEvent = new cl_event();
 	//printf("total layer: %i\n", totalLayers);
 
 	for (int i = 0; i < totalLayers - cpuLayers; i++) {
 		
-		status = clSetKernelArg(kdConCon.kdTreeKernel, 3+(i%2), sizeof(cl_mem), &kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
-		status = clSetKernelArg(kdConCon.kdTreeKernel, 3+((i+1)%2), sizeof(cl_mem), &kdConCon.clQB);
-
+		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3+(i%2), sizeof(cl_mem), kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
+		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3+((i+1)%2), sizeof(cl_mem), kdConCon.clQB);
 
 		size_t globalWorkSize[3] = { glm::pow(2, i+cpuLayers), 1, 1 };
 
-
-
-
-		//enqueue a sorting kernel for each input to sort it
-
-		clFinish(kdConCon.cmdQueue);
-		status = clEnqueueNDRangeKernel(kdConCon.cmdQueue, kdConCon.kdTreeKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
+		clFinish(*kdConCon.cmdQueue);
+		status = clEnqueueNDRangeKernel(*kdConCon.cmdQueue, *kdConCon.kdTreeKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
+		if (status)printf("kd kernel execution %i,  %i\n",i, status);
 		clWaitForEvents(1, kernelEvent);
 
 		
 	}
-	clFinish(kdConCon.cmdQueue);
+	clFinish(*kdConCon.cmdQueue);
 
 
 
 
-	clEnqueueReadBuffer(kdConCon.cmdQueue, kdConCon.clTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 1, kernelEvent, NULL);
+	//status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 1, kernelEvent, NULL);
+	//if (status)printf("kd read 1 %i\n", status);
 
 
-
+	//printTree(theTree);
 
 
 
@@ -241,7 +248,8 @@ KDNode* makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KD
 	//processNode(toReturn, balls, 0, numberOfPoints-1, totalList, 0, 1);
 
 	//printf("\n\n\n\n");
-	return theTree;
+	//return theTree;
+	//printf("kd clmem: %p\n", &kdConCon.clTheTree);
 }
 
 
@@ -267,7 +275,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 
 	vector<int32_t> outputVector = vector<int32_t>();
 
-	fvec3 theBall = particles[originDot].position;
+	fvec3 theBall = particles[originDot].position.xyz;
 
 
 	if (dbg)printf("origin: %s\n", glm::to_string(theBall).c_str());
@@ -278,7 +286,9 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 		numberVisited++;
 
 		uint32_t currIdx = printQueue.front();
+		printf("visiting tree index %u\n", currIdx);
 		KDNode currNode = theTree[currIdx-1];
+
 		printQueue.pop();
 
 
@@ -286,7 +296,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 		maxLayer = glm::max(maxLayer, layer);
 		int axis = layer % 3;
 
-		float dsquared = distance2(theBall, particles[currNode.pointIdx].position);
+		float dsquared = distance2(theBall, fvec3(particles[currNode.pointIdx].position));
 
 		if ( (dsquared <= rquared) && (currNode.pointIdx != originDot)) {
 			outputVector.push_back(currNode.pointIdx);
