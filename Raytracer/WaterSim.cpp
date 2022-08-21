@@ -34,7 +34,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 6000;
+constexpr uint32_t MAX_PARTICLES = 60000;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -472,23 +472,54 @@ int main()
 		//printf("theother clmem: %p\n", &clTheTree);
 
 
-		size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(float(numberOfPoints)) + 1))) - 1;
-		KDNode* theTree = new KDNode[memForTree]();
+		//size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(float(numberOfPoints)) + 1))) - 1;
+		//KDNode* theTree = new KDNode[memForTree]();
 
-		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, NULL);
-		if (status)printf("reading in the tree %i\n", status);
+		//status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, NULL);
+		//if (status)printf("reading in the tree %i\n", status);
 		//printTree(theTree);
 
-		printf("getting dots in range\n");
-		vector<int32_t> dotsInRange = getDotsInRange(initialParticles, theTree, 2, 3);
+		//printf("getting dots in range\n");
+		//vector<int32_t> dotsInRange = getDotsInRange(initialParticles, theTree, 2, 3);
 
 
 
-		for (auto i : dotsInRange) {
-			printf("%i, ", i);
-		}
-		printf("\n");
-		//printTree(theTree);
+		////vector<int32_t> dotsInRangeOld = getDotsInRangeOld(initialParticles, theTree, 2, 3);
+
+
+		//std::sort(dotsInRange.begin(), dotsInRange.end());
+
+		//vector<int32_t> manualClosePoints = vector<int32_t>();
+
+		//fvec3 twentyFourPos = initialParticles[2].position.xyz;
+		//for (int32_t i = 0; i < numberOfPoints; i++) {
+		//	if (i != 2) {
+		//		fvec3 otherPos = initialParticles[i].position;
+		//		float d = glm::distance(twentyFourPos, otherPos);
+		//		if (d <= theRange) {
+		//			manualClosePoints.push_back(i);
+		//		}
+		//	}
+		//}
+
+		//std::sort(manualClosePoints.begin(), manualClosePoints.end());
+		//
+		//printf("dotsInRangeSize: %zu\n", dotsInRange.size());
+		//printf("dotsInRangeManual: %zu\n", manualClosePoints.size());
+
+
+		//for (auto i : dotsInRange) {
+		//	printf("%i, ", i);
+		//}
+		//printf("\n");
+		//for (auto i : manualClosePoints) {
+		//	printf("%i, ", i);
+		//}
+		//printf("\n");
+
+		//printf("\n");
+		////printTree(theTree);
+		//cin.get();
 
 		float floatDeltaTime = float(deltaTime);
 
@@ -506,7 +537,7 @@ int main()
 		clWaitForEvents(1, kernelEvent);
 		clFinish(*kdConCon.cmdQueue);
 
-		cin.get();
+		//cin.get();
 
 
 

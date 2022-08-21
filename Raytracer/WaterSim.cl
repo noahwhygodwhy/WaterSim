@@ -33,8 +33,8 @@ float indexF4(__global float4* a, int index) {
 }
 
 float distance_squared(float3 a, float3 b) {
-  float3 c = a - b;
-  return (c.x * c.x) + (c.y + c.y) + (c.z * c.z);
+    float3 c = a - b;
+    return (c.x * c.x) + (c.y + c.y) + (c.z * c.z);
 }
 
 __kernel void computeDP(
@@ -70,21 +70,22 @@ __kernel void computeDP(
 
     // return;
 
+    bool lastParent = false;
     
     while (currIdx > 0) { // or while(true)???
         //printf("currIdx: %i\n", currIdx);
         //printf("traveledNodes: %i\n", traveledNodes);
         //traveledNodes++;
-        printf("visiting tree index %u\n", currIdx);
+        //printf("visiting tree index %u\n", currIdx);
         struct KDNode currNode = theTree[currIdx - 1];
 
         int layer = (int)(floor(log2((float)(currIdx))));
         int axis = layer % 3;
         float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
-        if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx)) {
+        if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
-            printf("neighbor: %i, \n", currNode.pointIdx);
-            particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0); // temp
+            //printf("neighbor: %i, \n", currNode.pointIdx);
+            particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
         // DO CALCULATIONS INVOLVING NEIGHBORS HERE
         }
 
@@ -92,23 +93,55 @@ __kernel void computeDP(
         float val = indexF3(theBall, axis);
         int tooCloseToCall = fabs(val - currNode.value) <= NEIGHBOR_RADIUS;
 
-        int possiblyGreater = tooCloseToCall || (val > currNode.value);
-        int possiblyLesser = tooCloseToCall || (val < currNode.value);
+        int possiblyGreater = (tooCloseToCall || (val > currNode.value)) && currNode.greaterChild >= 0;
+        int possiblyLesser = (tooCloseToCall || (val < currNode.value)) && currNode.lesserChild >= 0;
         //printf("%f, %f\n",val, currNode.value);
         //printf("%u, %u, %i, %u\n", lesserTraversals, greaterTraversals, possiblyGreater, possiblyLesser);
 
-        int goingLesser = possiblyLesser && !(1 & lesserTraversals);
-        int goingGreater = !goingLesser && possiblyGreater && !(1 & greaterTraversals);
-        int goingParent = !goingLesser && !goingGreater;
+        lastParent = false;
+        if(possiblyLesser && !(1&lesserTraversals)) {
+              
+              //printf("going lesser\n");
+                lesserTraversals |= 1;
+                lesserTraversals = lesserTraversals<<1;
+                greaterTraversals = greaterTraversals<<1;
+                currIdx = currNode.lesserChild+1;
+            }
+        else {
+            if (possiblyGreater && !(1 & greaterTraversals)) {
+                //printf("going greater\n");
+                greaterTraversals |= 1;
+                lesserTraversals = lesserTraversals << 1;
+                greaterTraversals = greaterTraversals << 1;
+                currIdx = currNode.greaterChild + 1;
+            }
+            else {
+                lastParent = true;
+                //printf("going parent\n");
+                currIdx = currIdx / 2;
+                lesserTraversals = lesserTraversals >> 1;
+                greaterTraversals = greaterTraversals >> 1;
+            }
+        }
 
-        lesserTraversals = lesserTraversals << (goingGreater || goingLesser);
-        greaterTraversals = greaterTraversals << (goingGreater || goingLesser);
-        lesserTraversals = lesserTraversals >> goingParent;
-        greaterTraversals = greaterTraversals >> goingParent;
 
-        currIdx = (goingLesser * (currNode.lesserChild+1)) +
-                (goingGreater * (currNode.greaterChild+1)) +
-                (goingParent * (currIdx >> 1));
+
+
+        // int goingLesser = possiblyLesser && !(1 & lesserTraversals);
+        // int goingGreater = !goingLesser && possiblyGreater && !(1 & greaterTraversals);
+        // int goingParent = !goingLesser && !goingGreater;
+
+        // lesserTraversals = lesserTraversals << (goingGreater || goingLesser);
+        // greaterTraversals = greaterTraversals << (goingGreater || goingLesser);
+        // lesserTraversals = lesserTraversals >> goingParent;
+        // greaterTraversals = greaterTraversals >> goingParent;
+
+        // currIdx = (goingLesser * (currNode.lesserChild+1)) +
+        //         (goingGreater * (currNode.greaterChild+1)) +
+        //         (goingParent * (currIdx >> 1));
+
+
+        //         // 
         //printf("%i, %i, %i, %u\n", goingLesser, goingGreater, goingParent, currIdx);
 
         // if(possiblyLesser && !(1&lesserTraversals)) {

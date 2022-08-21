@@ -54,6 +54,7 @@ void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDCon
 
 vector<int32_t> getDotsInRange(const Particle* balls, KDNode* theTree, uint32_t originDot, float range);
 
+vector<int32_t> getDotsInRangeOld(const Particle* balls, KDNode* theTree, uint32_t originDot, float range);
 
 
 #endif

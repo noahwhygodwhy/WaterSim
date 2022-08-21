@@ -259,7 +259,7 @@ bool dbg = false;
 
 
 
-vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint32_t originDot, float range) {
+vector<int32_t> getDotsInRangeOld(const Particle* particles, KDNode* theTree, uint32_t originDot, float range) {
 
 	int maxLayer = 0;
 	int numberVisited = 0;
@@ -280,7 +280,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 
 	if (dbg)printf("origin: %s\n", glm::to_string(theBall).c_str());
 
-	float rquared = range * range;
+	float rsquared = range * range;
 
 	while (!printQueue.empty()) {
 		numberVisited++;
@@ -298,7 +298,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 
 		float dsquared = distance2(theBall, fvec3(particles[currNode.pointIdx].position));
 
-		if ( (dsquared <= rquared) && (currNode.pointIdx != originDot)) {
+		if ( (dsquared <= rsquared) && (currNode.pointIdx != originDot)) {
 			outputVector.push_back(currNode.pointIdx);
 		}
 
@@ -318,4 +318,112 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 	}
 	//printf("max layer: %i, numVisitd: %i\n", maxLayer, numberVisited);
 	return outputVector;
+}
+
+string toBinary(int n, int len)
+{
+	string binary;
+	for (unsigned i = (1 << len - 1); i > 0; i = i / 2) {
+		binary += (n & i) ? "1" : "0";
+	}
+	return binary;
+}
+
+vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint32_t originDot, float range) {
+
+	vector<int32_t> toReturn = vector<int32_t>();
+
+	int currIdx = 1;
+	uint lesserTraversals = 0;
+	uint greaterTraversals = 0;
+
+	int traveledNodes = 0;
+
+	// for(int i = 0; i < 60; i++) {
+	//     struct KDNode c = theTree[i];
+	//     printf("i: %i, idx: %u, V: %f, L: %i, R: %i\n", i, c.pointIdx, c.value, c.greaterChild, c.lesserChild);
+	// }
+
+	// return;
+	fvec3 theBall = particles[originDot].position;
+
+	float rsquared = range * range;
+
+	bool lastParent = false;
+
+	while (currIdx > 0) { // or while(true)???
+		//printf("currIdx: %i\n", currIdx);
+		//printf("traveledNodes: %i\n", traveledNodes);
+		//traveledNodes++;
+		//printf("\n=======================\nvisiting tree index %u\n", currIdx);
+		struct KDNode currNode = theTree[currIdx - 1];
+
+		int layer = (int)(floor(log2((float)(currIdx))));
+		int axis = layer % 3;
+		float dsquared = glm::distance2(theBall, vec3(particles[currNode.pointIdx].position));
+		if ((dsquared <= rsquared) && (currNode.pointIdx != originDot) && !lastParent) {
+			toReturn.push_back(currNode.pointIdx);
+			//float distance = sqrt(dsquared);
+			//printf("neighbor: %i, \n", currNode.pointIdx);
+			//particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0); // temp
+		// DO CALCULATIONS INVOLVING NEIGHBORS HERE
+		}
+
+
+		float val = theBall[axis];
+		bool tooCloseToCall = fabs(val - currNode.value) <= range;
+
+		bool possiblyGreater = (tooCloseToCall || (val > currNode.value)) && (currNode.greaterChild >= 0);
+		bool possiblyLesser = (tooCloseToCall || (val < currNode.value)) && (currNode.lesserChild >= 0);
+		//printf("%f, %f\n",val, currNode.value);
+		//printf("%u, %u, %i, %u\n", lesserTraversals, greaterTraversals, possiblyGreater, possiblyLesser);
+
+		/*int goingLesser = possiblyLesser && !(1 & lesserTraversals);
+		int goingGreater = !goingLesser && possiblyGreater && !(1 & greaterTraversals);
+		int goingParent = !goingLesser && !goingGreater;
+
+		lesserTraversals = lesserTraversals << (goingGreater || goingLesser);
+		greaterTraversals = greaterTraversals << (goingGreater || goingLesser);
+		lesserTraversals = lesserTraversals >> goingParent;
+		greaterTraversals = greaterTraversals >> goingParent;
+
+		currIdx = (goingLesser * (currNode.lesserChild + 1)) +
+			(goingGreater * (currNode.greaterChild + 1)) +
+			(goingParent * (currIdx >> 1));*/
+		//printf("%i, %i, %i, %u\n", goingLesser, goingGreater, goingParent, currIdx);
+		lastParent = false;
+		 if(possiblyLesser && !(1&lesserTraversals)) {
+			 
+			 //printf("going lesser\n");
+		     lesserTraversals |= 1;
+		     lesserTraversals = lesserTraversals<<1;
+		     greaterTraversals = greaterTraversals<<1;
+		     currIdx = currNode.lesserChild+1;
+		 }
+		 else {
+			 if (possiblyGreater && !(1 & greaterTraversals)) {
+				 //printf("going greater\n");
+				 greaterTraversals |= 1;
+				 lesserTraversals = lesserTraversals << 1;
+				 greaterTraversals = greaterTraversals << 1;
+				 currIdx = currNode.greaterChild + 1;
+			 }
+			 else {
+				 lastParent = true;
+				 //printf("going parent\n");
+				 currIdx = currIdx / 2;
+				 lesserTraversals = lesserTraversals >> 1;
+				 greaterTraversals = greaterTraversals >> 1;
+			 }
+		 }
+		 //printf("greaterChild: %i, lesserChild: %i\n", currNode.greaterChild, currNode.lesserChild);
+		 //printf("pL: %i, pG: %i\n", int(possiblyLesser), int(possiblyGreater));
+		 //printf("origin index: %u, this nodes index: %i\n", originDot, currIdx - 1);
+		 //printf("lT: %u, gT: %u\n", lesserTraversals, greaterTraversals);
+		 //printf("lT: %s\n", toBinary(lesserTraversals, 32).c_str());
+		 //printf("gT: %s\n", toBinary(greaterTraversals, 32).c_str());
+
+
+	}
+	return toReturn;
 }
