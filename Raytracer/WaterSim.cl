@@ -6,8 +6,8 @@
 
 // page 29
 
-const float NEIGHBOR_RADIUS = 3.0f;
-const float NEIGHBOR_RADIUS_SQUARED = 9.0f;
+__constant float NEIGHBOR_RADIUS = 3.0f;
+__constant float NEIGHBOR_RADIUS_SQUARED = 9.0f;
 
 float indexF3(float3 a, int index) {
     switch (index) {
@@ -35,6 +35,39 @@ float indexF4(__global float4* a, int index) {
 float distance_squared(float3 a, float3 b) {
     float3 c = a - b;
     return (c.x * c.x) + (c.y + c.y) + (c.z * c.z);
+}
+
+void gSwap(__global unsigned int *a, __global unsigned int *b) {
+  unsigned int t = *a;
+  *a = *b;
+  *b = t;
+}
+__kernel void bitonicSort(
+    __global struct Particle *particles,
+    __global unsigned int *totalList,
+    __global unsigned int *indexOfNodeList,
+    int axis
+){
+
+    size_t numParticles = get_global_size(0);
+    int idx = get_global_id(0);
+    printf("idx %i\n", idx);
+    for (int k = 2; k <= numParticles; k *= 2) {      // k is doubled every iteration
+        for (int j = k / 2; j > 0; j /= 2) { // j is halved at every iteration, with
+                                            // truncation of fractional parts
+            int l = idx ^ j; // in C-like languages this is "i ^ j"
+            if (indexOfNodeList[idx] == indexOfNodeList[l] && l > idx) 
+            {
+                if (!(((idx & k) == 0) ^
+                    (indexF4(&particles[totalList[idx]].position, axis) >
+                    indexF4(&particles[totalList[l]].position, axis))) //last 3 lines of if are for actualy bitonic sort
+                ) {
+                    gSwap(totalList + idx, totalList + l);
+                }
+            }
+            barrier(CLK_GLOBAL_MEM_FENCE);
+        }
+    }
 }
 
 __kernel void computeDP(
@@ -72,6 +105,8 @@ __kernel void computeDP(
 
     bool lastParent = false;
     
+	//printf("gpu version:\n");
+    printf("gpu:\n");
     while (currIdx > 0) { // or while(true)???
         //printf("currIdx: %i\n", currIdx);
         //printf("traveledNodes: %i\n", traveledNodes);
@@ -79,12 +114,14 @@ __kernel void computeDP(
         //printf("visiting tree index %u\n", currIdx);
         struct KDNode currNode = theTree[currIdx - 1];
 
+		//printf("visiting tree index %u\n", currIdx-1);
+
         int layer = (int)(floor(log2((float)(currIdx))));
         int axis = layer % 3;
         float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
         if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
-            //printf("neighbor: %i, \n", currNode.pointIdx);
+            printf("%i, ", currNode.pointIdx);
             particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
         // DO CALCULATIONS INVOLVING NEIGHBORS HERE
         }
@@ -163,7 +200,7 @@ __kernel void computeDP(
         //     greaterTraversals = greaterTraversals>>1;
         // }
     }
-
+    printf("\n");
   // positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
 }
 
@@ -180,78 +217,99 @@ __kernel void computeDP(
 //     positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
 // }
 
-void gSwap(__global unsigned int *a, __global unsigned int *b) {
-  unsigned int t = *a;
-  *a = *b;
-  *b = t;
-}
 
 // https://en.wikipedia.org/wiki/Bitonic_sorter
-void bitonicSort(int start, int end, int axis,
-                 __global struct Particle *particles,
-                 __global unsigned int *totalList) {
-  // bool dbg = (get_global_id(0)==0);
+// void bitonicSort(int start, int end, int axis,
+//                  __global struct Particle *particles,
+//                  __global unsigned int *totalList) {
+//   // bool dbg = (get_global_id(0)==0);
 
-  // if(dbg)printf("start: %i, end: %i, n: %i\n", start, end, (start-end)+1);
+//   // if(dbg)printf("start: %i, end: %i, n: %i\n", start, end, (start-end)+1);
 
-  int n = (end - start) + 1;
+//   int n = (end - start) + 1;
 
-  for (int k = 2; k <= n; k *= 2) {      // k is doubled every iteration
-    for (int j = k / 2; j > 0; j /= 2) { // j is halved at every iteration, with
-                                         // truncation of fractional parts
-      for (int i = 0; i < n; i++) {
-        int l = i ^ j; // in C-like languages this is "i ^ j"
+//   for (int k = 2; k <= n; k *= 2) {      // k is doubled every iteration
+//     for (int j = k / 2; j > 0; j /= 2) { // j is halved at every iteration, with
+//                                          // truncation of fractional parts
+//       for (int i = 0; i < n; i++) {
+//         int l = i ^ j; // in C-like languages this is "i ^ j"
 
-        // printf("idx: %i, l: %i, i: %i, k: %i", get_global_id(0), l, i, k);
+//         // printf("idx: %i, l: %i, i: %i, k: %i", get_global_id(0), l, i, k);
 
-        if (l > i) {
-          if (!(((i & k) == 0) ^
-                (indexF4(&particles[totalList[i]].position, axis) >
-                 indexF4(&particles[totalList[l]].position, axis)))) {
-            gSwap(totalList + i, totalList + l);
-          }
-        }
-      }
-    }
-  }
-}
+//         if (l > i) {
+//           if (!(((i & k) == 0) ^
+//                 (indexF4(&particles[totalList[i]].position, axis) >
+//                  indexF4(&particles[totalList[l]].position, axis)))) {
+//             gSwap(totalList + i, totalList + l);
+//           }
+//         }
+//       }
+//     }
+//   }
+// }
 
 __kernel void makeKDTree(__global struct Particle *particles,
                          __global unsigned int *totalList,
                          __global struct KDNode *theTree, 
-                         __global int3 *input,
-                         __global int3 *output, 
-                         int inputCount) {
-  int idx = get_global_id(0);
+                         __global int4 *input,
+                         __global int4 *output, 
+                         int inputCount,
+                         __global int *nodeIndexList,
+                         int layer,
+                         int axis) {
+    int idx = get_global_id(0);
 
-  int3 curr = input[idx];
-  int treeIdx = curr.x;
-  int startingIdx = curr.y;
-  int endingIdx = curr.z;
-  int middleIdx = (startingIdx + endingIdx) / 2;
-  int layer = (int)(floor(log2((float)(treeIdx))));
-  int axis = layer % 3;
-  int lesserChildIdx = -1;
-  int greaterChildIdx = -1;
+    int4 curr = input[idx];
+    int treeIdx = curr.x;
+    if(treeIdx < 0)
+    {
+        output[idx * 2] = ((int4)(-1, 0,0, 0));
+        output[(idx * 2) + 1] = ((int4)(-1, 0,0, 0));
+        return;
+    }
+    int startingIdx = curr.y;
+    int endingIdx = curr.z;
+    int middleIdx = (startingIdx + endingIdx) / 2;
+    //int layer = (int)(floor(log2((float)(treeIdx))));
+    //int axis = layer % 3;
+    int lesserChildIdx = -1;
+    int greaterChildIdx = -1;
 
-  bitonicSort(startingIdx, endingIdx, axis, particles, totalList);
+    //bitonicSort(startingIdx, endingIdx, axis, particles, totalList); now done beforehand in a seperate kernel call
 
-  int hasGreater = (int)(middleIdx < endingIdx);
-  int noGreater = 1 - hasGreater;
-  int hasLesser = (int)(middleIdx > startingIdx);
-  int noLesser = 1 - hasLesser;
+    int hasGreater = (int)(middleIdx < endingIdx);
+    int noGreater = 1 - hasGreater;
+    int hasLesser = (int)(middleIdx > startingIdx);
+    int noLesser = 1 - hasLesser;
 
-  lesserChildIdx = ((treeIdx << 1) * hasLesser) + (noLesser * -1);
-  output[idx * 2] = ((int3)(lesserChildIdx, startingIdx, middleIdx - 1));
+    lesserChildIdx = ((treeIdx << 1) * hasLesser) + (noLesser * -1);
+    greaterChildIdx = (((treeIdx << 1) + 1) * hasGreater) + (noGreater * -1);
 
-  output[(idx * 2) + 1] = ((int3)(greaterChildIdx, middleIdx + 1, endingIdx));
+    output[idx * 2] = ((int4)(lesserChildIdx, startingIdx, middleIdx - 1, 0));
+    output[(idx * 2) + 1] = ((int4)(greaterChildIdx, middleIdx + 1, endingIdx, 0));
 
-  lesserChildIdx = (((treeIdx << 1) + 1) * hasGreater) + (noGreater * -1);
+    for(int i = startingIdx; i <= middleIdx-1; i++) {
+        nodeIndexList[i] = lesserChildIdx;
+    }
+    for(int i = middleIdx+1; i <= endingIdx; i++) {
+        nodeIndexList[i] = greaterChildIdx;
+    }
 
-  struct KDNode nodeToAdd = {
-      indexF4(&particles[totalList[middleIdx]].position, axis),
-      totalList[middleIdx], greaterChildIdx - 1, lesserChildIdx - 1};
-  theTree[treeIdx - 1] = nodeToAdd;
+    struct KDNode nodeToAdd = {
+        indexF4(&particles[totalList[middleIdx]].position, axis),
+        totalList[middleIdx], greaterChildIdx - 1, lesserChildIdx - 1};
+    theTree[treeIdx - 1] = nodeToAdd;
+
+    
+    if(false)printf("\nidx: %i, treeIdx: %i\nstartingIdx %i, middleIdx: %i, endingIdx: %i\nhG %i, nG %i, hL %i, nL %i\ninput: %i, %i, %i, output: %i, %i, %i | %i, %i, %i\n", 
+        idx, treeIdx, 
+        startingIdx, middleIdx, endingIdx, 
+        hasGreater, noGreater, hasLesser, noLesser,
+        input[idx].x, input[idx].y, input[idx].z,
+        output[idx * 2].x, output[idx * 2].y, output[idx * 2].z,
+        output[(idx * 2) + 1].x, output[(idx * 2) + 1].y, output[(idx * 2) + 1].z
+    );
+
 }
 
 // slide 25 https://web.engr.oregonstate.edu/~mjb/cs575/Handouts/opencl.2pp.pdf

@@ -47,17 +47,20 @@ void printTree(KDNode* theTree) {
 
 
 
-void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDConstructionContext& kdConCon) {
+void makeKDTree(const Particle* particles, const size_t& numberOfPoints, const KDConstructionContext& kdConCon) {
 
 
 	cl_int status; 
 	
 	uint32_t* totalList = new uint32_t[numberOfPoints];
+	int32_t* nodeIndexList = new int32_t[numberOfPoints];
 	for (uint32_t i = 0; i < numberOfPoints; i++) {
-		totalList[i] = i;	
+		totalList[i] = i;
+		nodeIndexList[i] = 1;
 	}
 
-	int cpuLayers = glm::ceil(glm::log2(float(numberOfPoints)) + 1)-2;
+	int cpuLayers = 1;// glm::ceil(glm::log2(float(numberOfPoints)) + 1) - 2;
+
 	//printf("cpu layers: %i\n", cpuLayers);
 
 	size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(float(numberOfPoints))+1)))-1;
@@ -66,15 +69,16 @@ void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDCon
 	
 	KDNode* theTree = new KDNode[memForTree]();
 
-	queue<ivec3> indexQueue = queue<ivec3>(); //where each vec3 is (treeIdx, staringIdx, endingIdx)
+	queue<ivec4> indexQueue = queue<ivec4>(); //where each vec3 is (treeIdx, staringIdx, endingIdx)
 	
-	indexQueue.push(ivec3(1, 0, numberOfPoints - 1));
+	indexQueue.push(ivec4(1, 0, numberOfPoints - 1, 0));
 
+	
 
 
 	while (!indexQueue.empty() && indexQueue.size() < glm::pow(2, cpuLayers)) { //TODO: 64 = 2^6, nees to change this to just be a calculated value from the layer
 
-		ivec3 curr = indexQueue.front();
+		ivec4 curr = indexQueue.front();
 		indexQueue.pop();
 
 		int treeIdx = curr.x;
@@ -89,39 +93,52 @@ void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDCon
 		int lesserChildIdx = -1;
 		int greaterChildIdx = -1;
 
-		auto mySert = [balls, axis](size_t a, size_t b) {
-			return balls[a].position[axis] < balls[b].position[axis];
+		auto mySert = [particles, axis](size_t a, size_t b) {
+			return particles[a].position[axis] < particles[b].position[axis];
 		};
 
 		sort(totalList + startingIdx, totalList + endingIdx + 1, mySert);
 
 		if (middleIdx > startingIdx) {//has lesser children
 			lesserChildIdx = treeIdx << 1;
-			indexQueue.push(ivec3(lesserChildIdx, startingIdx, middleIdx - 1));
+			indexQueue.push(ivec4(lesserChildIdx, startingIdx, middleIdx - 1, 0));
 		}
 		if (middleIdx < endingIdx) { //has greater children
 			greaterChildIdx = (treeIdx << 1) + 1;
-			indexQueue.push(ivec3(greaterChildIdx, middleIdx + 1, endingIdx));
+			indexQueue.push(ivec4(greaterChildIdx, middleIdx + 1, endingIdx, 0));
 		}
 
 
 		theTree[treeIdx - 1] = KDNode(
-			balls[totalList[middleIdx]].position[axis],
+			particles[totalList[middleIdx]].position[axis],
 			totalList[middleIdx],
 			greaterChildIdx - 1,
 			lesserChildIdx - 1
 		);
-	}
+	} 
 
 
-	int numberOfStartingInputs = indexQueue.size();
+	
+	int firstGPULayer = cpuLayers;
+	
+	int startingNode = int(glm::pow(2, firstGPULayer)) - 1;
 
-	ivec3* tempInput = new ivec3[numberOfStartingInputs]();
-	for (int f = 0; f < numberOfStartingInputs; f++) {
-		tempInput[f] = indexQueue.front();
-		//printf("%s\n", glm::to_string(tempInput[f]).c_str());
-		indexQueue.pop();
-	}
+	int numberOfStartingInputs = 1;
+
+	ivec4* tempInput = new ivec4[numberOfStartingInputs]();
+	tempInput[0] = ivec4(1, 0, numberOfPoints - 1, 0);
+
+	//int i = 0;
+	//for (int f = 0; f < numberOfStartingInputs; f++) {
+	//	tempInput[f] = indexQueue.front();
+	//	//printf("tempInput: %i, %i, %i\n", tempInput[f].x, tempInput[f].y, tempInput[f].z);
+	//	for (int j = 0; j < (tempInput[f].z - tempInput[f].y) + 1; j++) {
+	//		nodeIndexList[i++] = startingNode;
+	//	}
+	//	startingNode++;	
+	//	nodeIndexList[i++] = 0;
+	//	indexQueue.pop();
+	//}
 
 
 
@@ -134,19 +151,22 @@ void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDCon
 
 	int totalLayers = glm::ceil(glm::log2(float(numberOfPoints)))+1;
 
-	cl_event* writeEvents = new cl_event[3]();
+	cl_event* writeEvents = new cl_event[4]();
 	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clTotalList, CL_FALSE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, &writeEvents[0]);
 	if (status)printf("kd write 1 %i\n", status);
+
+	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clnodeIndexList, CL_FALSE, 0, sizeof(int32_t) * numberOfPoints, nodeIndexList, 0, NULL, &writeEvents[1]);
+	if (status)printf("bitonic write 1 %i\n", status);
 
 	//printf("\n%p, %p, %i, %p, %p\n\n", &kdConCon.cmdQueue, &kdConCon.clTheTree, memForTree, theTree, &writeEvents[1]);
 
 
-	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_FALSE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, &writeEvents[1]);
+	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_FALSE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, &writeEvents[2]);
 	if (status)printf("kd write 2 %i\n", status);
 
-	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clQA, CL_FALSE, 0, sizeof(ivec3)* numberOfStartingInputs, tempInput, 0, NULL, &writeEvents[2]);
+	status = clEnqueueWriteBuffer(*kdConCon.cmdQueue, *kdConCon.clQA, CL_FALSE, 0, sizeof(ivec4)* numberOfStartingInputs, tempInput, 0, NULL, &writeEvents[3]);
 	if (status)printf("kd write 3 %i\n", status);
-	clWaitForEvents(3, writeEvents);
+	clWaitForEvents(4, writeEvents);
 
 	/*printf("total list pre anything:\n");
 	clEnqueueReadBuffer(kdConCon.cmdQueue, kdConCon.clTotalList, CL_TRUE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, NULL);
@@ -192,17 +212,64 @@ void makeKDTree(const Particle* balls, const size_t& numberOfPoints, const KDCon
 	cl_event* kernelEvent = new cl_event();
 	//printf("total layer: %i\n", totalLayers);
 
-	for (int i = 0; i < totalLayers - cpuLayers; i++) {
+	printf("node index list:\n");
+	for (int i = 0; i < numberOfPoints; i++) {
+		printf("%i, ", totalList[i]);
+	}
+	printf("\n");
+	printf("node index list:\n");
+	for (int i = 0; i < numberOfPoints; i++) {
+		printf("%i, ", nodeIndexList[i]);
+	}
+	printf("\n");
+
+
+	for (int layer = 0; layer < totalLayers; layer++) {
 		
-		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3+(i%2), sizeof(cl_mem), kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
-		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3+((i+1)%2), sizeof(cl_mem), kdConCon.clQB);
 
-		size_t globalWorkSize[3] = { glm::pow(2, i+cpuLayers), 1, 1 };
+		printf("\n\nlayer %i\n", layer);
+		int axis = layer % 3;
 
-		clFinish(*kdConCon.cmdQueue);
-		status = clEnqueueNDRangeKernel(*kdConCon.cmdQueue, *kdConCon.kdTreeKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
-		if (status)printf("kd kernel execution %i,  %i\n",i, status);
+		size_t bitonicGlobalWorkSize[3] = { numberOfPoints, 1, 1 };
+
+		status = clSetKernelArg(*kdConCon.bitonicKernel, 3, sizeof(int), &axis);
+		if (status)printf("bitonic kernel 0 %i\n", status);
+
+		status = clEnqueueNDRangeKernel(*kdConCon.cmdQueue, *kdConCon.bitonicKernel, 1, NULL, bitonicGlobalWorkSize, NULL, 0, NULL, kernelEvent);
+		if (status)printf("bitonic execution %i, %i\n", layer, status);
 		clWaitForEvents(1, kernelEvent);
+		clFinish(*kdConCon.cmdQueue);
+
+		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTotalList, CL_FALSE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, NULL);
+		if (status)printf("kd read 5 %i\n", status);
+		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clnodeIndexList, CL_FALSE, 0, sizeof(int32_t) * numberOfPoints, nodeIndexList, 0, NULL, NULL);
+		if (status)printf("bitonic write 1 %i\n", status);
+		clFinish(*kdConCon.cmdQueue);
+
+		for (int fda = 0; fda < numberOfPoints; fda++) {
+			if (fda % 4 == 0)printf("\n");
+			int jk = totalList[fda];
+			printf("\t%i\t%i(%.2f, %.2f, %.2f)", jk, nodeIndexList[jk], particles[jk].position.x, particles[jk].position.y, particles[jk].position.z);
+		}
+		printf("\n");
+		printf("sorted\n");
+		cin.get();
+		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3 + (layer%2), sizeof(cl_mem), kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
+		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3 + ((layer+1)%2), sizeof(cl_mem), kdConCon.clQB);
+
+		status = clSetKernelArg(*kdConCon.kdTreeKernel, 7, sizeof(int), &layer);
+		if (status)printf("kdConCon 7 %i\n", status);
+		status = clSetKernelArg(*kdConCon.kdTreeKernel, 8, sizeof(int), &axis);
+		if (status)printf("kdConCon 8 %i\n", status);
+
+
+
+		size_t kdGlobalWorkSize[3] = { glm::pow(2, layer), 1, 1 };
+
+		status = clEnqueueNDRangeKernel(*kdConCon.cmdQueue, *kdConCon.kdTreeKernel, 1, NULL, kdGlobalWorkSize, NULL, 0, NULL, kernelEvent);
+		if (status)printf("kd kernel execution %i,  %i\n",layer, status);
+		clWaitForEvents(1, kernelEvent);
+		clFinish(*kdConCon.cmdQueue);
 
 		
 	}
@@ -259,66 +326,65 @@ bool dbg = false;
 
 
 
-vector<int32_t> getDotsInRangeOld(const Particle* particles, KDNode* theTree, uint32_t originDot, float range) {
-
-	int maxLayer = 0;
-	int numberVisited = 0;
-	if(dbg)printf("\n\nstarting to find dots in range %.2f\n", range);
-	const char* axises = "XYZ";
-	bool hasNextLayer = true;
-
-
-	queue<uint32_t> printQueue = queue<uint32_t>();
-
-	printQueue.push(1);
-
-
-	vector<int32_t> outputVector = vector<int32_t>();
-
-	fvec3 theBall = particles[originDot].position.xyz;
-
-
-	if (dbg)printf("origin: %s\n", glm::to_string(theBall).c_str());
-
-	float rsquared = range * range;
-
-	while (!printQueue.empty()) {
-		numberVisited++;
-
-		uint32_t currIdx = printQueue.front();
-		printf("visiting tree index %u\n", currIdx);
-		KDNode currNode = theTree[currIdx-1];
-
-		printQueue.pop();
-
-
-		int layer = int(glm::floor(glm::log2(float(currIdx))));
-		maxLayer = glm::max(maxLayer, layer);
-		int axis = layer % 3;
-
-		float dsquared = distance2(theBall, fvec3(particles[currNode.pointIdx].position));
-
-		if ( (dsquared <= rsquared) && (currNode.pointIdx != originDot)) {
-			outputVector.push_back(currNode.pointIdx);
-		}
-
-
-		float val = theBall[axis];
-		bool tooCloseToCall = glm::abs(val - currNode.value) <= range;
-		bool possiblyGreater = val > currNode.value;
-		bool possiblyLesser = val < currNode.value;
-
-
-		if (currNode.lesserChild > 0 && (tooCloseToCall || possiblyLesser)) {
-			printQueue.push(currNode.lesserChild+1);
-		}
-		if (currNode.greaterChild > 0 && (tooCloseToCall || possiblyGreater)) {
-			printQueue.push(currNode.greaterChild+1);
-		}
-	}
-	//printf("max layer: %i, numVisitd: %i\n", maxLayer, numberVisited);
-	return outputVector;
-}
+//vector<int32_t> getDotsInRangeOld(const Particle* particles, KDNode* theTree, uint32_t originDot, float range) {
+//
+//	int maxLayer = 0;
+//	int numberVisited = 0;
+//	if(dbg)printf("\n\nstarting to find dots in range %.2f\n", range);
+//	const char* axises = "XYZ";
+//	bool hasNextLayer = true;
+//
+//
+//	queue<uint32_t> printQueue = queue<uint32_t>();
+//
+//	printQueue.push(1);
+//
+//
+//	vector<int32_t> outputVector = vector<int32_t>();
+//
+//	fvec3 theBall = particles[originDot].position.xyz;
+//
+//
+//	if (dbg)printf("origin: %s\n", glm::to_string(theBall).c_str());
+//
+//	float rsquared = range * range;
+//	while (!printQueue.empty()) {
+//		numberVisited++;
+//
+//		uint32_t currIdx = printQueue.front();
+//		printf("visiting tree index %u\n", currIdx);
+//		KDNode currNode = theTree[currIdx-1];
+//
+//		printQueue.pop();
+//
+//
+//		int layer = int(glm::floor(glm::log2(float(currIdx))));
+//		maxLayer = glm::max(maxLayer, layer);
+//		int axis = layer % 3;
+//
+//		float dsquared = distance2(theBall, fvec3(particles[currNode.pointIdx].position));
+//
+//		if ( (dsquared <= rsquared) && (currNode.pointIdx != originDot)) {
+//			outputVector.push_back(currNode.pointIdx);
+//		}
+//
+//
+//		float val = theBall[axis];
+//		bool tooCloseToCall = glm::abs(val - currNode.value) <= range;
+//		bool possiblyGreater = val > currNode.value;
+//		bool possiblyLesser = val < currNode.value;
+//
+//
+//		if (currNode.lesserChild > 0 && (tooCloseToCall || possiblyLesser)) {
+//			printQueue.push(currNode.lesserChild+1);
+//		}
+//		if (currNode.greaterChild > 0 && (tooCloseToCall || possiblyGreater)) {
+//			printQueue.push(currNode.greaterChild+1);
+//		}
+//	}
+//	//printf("max layer: %i, numVisitd: %i\n", maxLayer, numberVisited);
+//	return outputVector;
+//}
 
 string toBinary(int n, int len)
 {
@@ -351,22 +417,22 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 
 	bool lastParent = false;
 
+	//printf("cpu version:\n");
 	while (currIdx > 0) { // or while(true)???
-		//printf("currIdx: %i\n", currIdx);
+		printf("\ncurrIdx: %i\n", currIdx);
 		//printf("traveledNodes: %i\n", traveledNodes);
 		//traveledNodes++;
 		//printf("\n=======================\nvisiting tree index %u\n", currIdx);
 		struct KDNode currNode = theTree[currIdx - 1];
 
+		//printf("visiting tree index %u\n", currIdx-1);
+
 		int layer = (int)(floor(log2((float)(currIdx))));
 		int axis = layer % 3;
 		float dsquared = glm::distance2(theBall, vec3(particles[currNode.pointIdx].position));
-		if ((dsquared <= rsquared) && (currNode.pointIdx != originDot) && !lastParent) {
+		if ((dsquared <= rsquared) && (currNode.pointIdx != originDot) && (!lastParent)) {
 			toReturn.push_back(currNode.pointIdx);
-			//float distance = sqrt(dsquared);
-			//printf("neighbor: %i, \n", currNode.pointIdx);
-			//particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0); // temp
-		// DO CALCULATIONS INVOLVING NEIGHBORS HERE
+			printf("adding %i\n", currNode.pointIdx);
 		}
 
 
@@ -394,7 +460,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 		lastParent = false;
 		 if(possiblyLesser && !(1&lesserTraversals)) {
 			 
-			 //printf("going lesser\n");
+			 printf("going lesser\n");
 		     lesserTraversals |= 1;
 		     lesserTraversals = lesserTraversals<<1;
 		     greaterTraversals = greaterTraversals<<1;
@@ -402,7 +468,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 		 }
 		 else {
 			 if (possiblyGreater && !(1 & greaterTraversals)) {
-				 //printf("going greater\n");
+				 printf("going greater\n");
 				 greaterTraversals |= 1;
 				 lesserTraversals = lesserTraversals << 1;
 				 greaterTraversals = greaterTraversals << 1;
@@ -410,7 +476,7 @@ vector<int32_t> getDotsInRange(const Particle* particles, KDNode* theTree, uint3
 			 }
 			 else {
 				 lastParent = true;
-				 //printf("going parent\n");
+				 printf("going parent\n");
 				 currIdx = currIdx / 2;
 				 lesserTraversals = lesserTraversals >> 1;
 				 greaterTraversals = greaterTraversals >> 1;

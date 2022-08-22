@@ -34,7 +34,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 60000;
+constexpr uint32_t MAX_PARTICLES = 20;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -166,10 +166,10 @@ int main()
 
 //Set up opencl memory
 	printf("context status: %i\n", status);
-	cl_command_queue_properties qProperties = CL_QUEUE_PROFILING_ENABLE;
+	cl_command_queue_properties* qProperties = new cl_command_queue_properties();
 	//*qProperties = CL_QUEUE_PROFILING_ENABLE;
 
-	cl_command_queue cmdQueue = clCreateCommandQueueWithProperties(clContext, device, &qProperties, &status);
+	cl_command_queue cmdQueue = clCreateCommandQueueWithProperties(clContext, device, qProperties, &status);
 	printf("cmdqueue status: %i\n", status);
 
 
@@ -180,11 +180,12 @@ int main()
 	uint32_t maxTreeMem = size_t(glm::pow(2, glm::ceil(glm::log2(float(MAX_PARTICLES)) + 1))) - 1;
 
 	//uint32_t maxTreeMem = uint32_t(glm::pow(2, glm::ceil(glm::log2(float(MAX_PARTICLES + 1))))) - 1;
-	cl_mem clKDQueueA = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec3) * maxTreeMem, NULL, &status);
-	cl_mem clKDQueueB = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec3) * maxTreeMem, NULL, &status);
+	cl_mem clKDQueueA = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec4) * maxTreeMem, NULL, &status);
+	cl_mem clKDQueueB = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(ivec4) * maxTreeMem, NULL, &status);
 	cl_mem clTheTree = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(KDNode) * maxTreeMem, NULL, &status);
 
 	cl_mem clTotalList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_PARTICLES, NULL, &status);
+	cl_mem clNodeIndexList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_PARTICLES, NULL, &status);
 
 	uint32_t numberOfPoints = 0;
 
@@ -282,6 +283,8 @@ int main()
 
 
 //create the kernels and set memory arguments
+	cl_kernel bitonicSortKernel = clCreateKernel(program, "bitonicSort", &status);
+	if (status)printf("bitonic sort kernel %i\n", status);
 	cl_kernel computeDPKernel = clCreateKernel(program, "computeDP", &status);
 	if (status)printf("computedp kernel %i\n", status);
 	cl_kernel kdTreeKernel = clCreateKernel(program, "makeKDTree", &status);
@@ -289,7 +292,18 @@ int main()
 
 
 
-	KDConstructionContext kdConCon(initialParticles, numberOfPoints, &clTotalList, &clKDQueueA, &clKDQueueB, &clTheTree, &cmdQueue, &kdTreeKernel);
+	KDConstructionContext kdConCon(
+		initialParticles,
+		numberOfPoints,
+		&clTotalList,
+		&clKDQueueA,
+		&clKDQueueB,
+		&clTheTree,
+		&cmdQueue,
+		&kdTreeKernel,
+		&bitonicSortKernel,
+		&clNodeIndexList
+	);
 
 
 
@@ -302,6 +316,15 @@ int main()
 	if (status)printf("kd kernel 0 %i\n", status);
 	status = clSetKernelArg(*kdConCon.kdTreeKernel, 2, sizeof(cl_mem), &clTheTree);
 	if (status)printf("kd kernel 2 %i\n", status);
+	status = clSetKernelArg(*kdConCon.kdTreeKernel, 6, sizeof(cl_mem), &clNodeIndexList);
+	if (status)printf("kd kernel 6 %i\n", status);
+
+	status = clSetKernelArg(*kdConCon.bitonicKernel, 0, sizeof(cl_mem), &clParticles);
+	if (status)printf("bitonic kernel 0 %i\n", status);
+	status = clSetKernelArg(*kdConCon.bitonicKernel, 1, sizeof(cl_mem), &clTotalList);
+	if (status)printf("bitonic kernel 0 %i\n", status);
+	status = clSetKernelArg(*kdConCon.bitonicKernel, 2, sizeof(cl_mem), &clNodeIndexList);
+	if (status)printf("bitonic kernel 0 %i\n", status);
 	
 
 	size_t globalWorkSize[3] = { MAX_PARTICLES, 1, 1 };
@@ -472,50 +495,61 @@ int main()
 		//printf("theother clmem: %p\n", &clTheTree);
 
 
-		//size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(float(numberOfPoints)) + 1))) - 1;
-		//KDNode* theTree = new KDNode[memForTree]();
+		size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(float(numberOfPoints)) + 1))) - 1;
+		KDNode* theTree = new KDNode[memForTree]();
 
-		//status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, NULL);
-		//if (status)printf("reading in the tree %i\n", status);
-		//printTree(theTree);
+		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, NULL);
+		if (status)printf("reading in the tree %i\n", status);
+		/*printTree(theTree);
+
+		cin.get();*/
+
 
 		//printf("getting dots in range\n");
-		//vector<int32_t> dotsInRange = getDotsInRange(initialParticles, theTree, 2, 3);
+		vector<int32_t> dotsInRange = getDotsInRange(initialParticles, theTree, 2, 3);
 
 
 
 		////vector<int32_t> dotsInRangeOld = getDotsInRangeOld(initialParticles, theTree, 2, 3);
 
 
-		//std::sort(dotsInRange.begin(), dotsInRange.end());
+		std::sort(dotsInRange.begin(), dotsInRange.end());
 
-		//vector<int32_t> manualClosePoints = vector<int32_t>();
+		vector<int32_t> manualClosePoints = vector<int32_t>();
 
-		//fvec3 twentyFourPos = initialParticles[2].position.xyz;
-		//for (int32_t i = 0; i < numberOfPoints; i++) {
-		//	if (i != 2) {
-		//		fvec3 otherPos = initialParticles[i].position;
-		//		float d = glm::distance(twentyFourPos, otherPos);
-		//		if (d <= theRange) {
-		//			manualClosePoints.push_back(i);
-		//		}
-		//	}
-		//}
+		fvec3 twentyFourPos = initialParticles[2].position.xyz;
+		printf("looking for index 2: %s\n", glm::to_string(twentyFourPos).c_str());
+		for (int32_t i = 0; i < numberOfPoints; i++) {
+			if (i != 2) {
+				fvec3 otherPos = initialParticles[i].position;
+				float d = glm::distance(twentyFourPos, otherPos);
+				if (d <= theRange) {
+					manualClosePoints.push_back(i);
+				}
+			}
+		}
 
-		//std::sort(manualClosePoints.begin(), manualClosePoints.end());
-		//
-		//printf("dotsInRangeSize: %zu\n", dotsInRange.size());
-		//printf("dotsInRangeManual: %zu\n", manualClosePoints.size());
+		std::sort(manualClosePoints.begin(), manualClosePoints.end());
+		
+		printf("dotsInRangeSize: %zu\n", dotsInRange.size());
+		printf("dotsInRangeManual: %zu\n", manualClosePoints.size());
+
+		printf("cpu getdotsinrange:\n");
+		for (auto i : dotsInRange) {
+			printf("%i, ", i);
+		}
+		printf("\n");
+		printf("manual:\n");
+		for (auto i : manualClosePoints) {
+			printf("%i, ", i);
+		}
+		printf("\n");
+
+		cin.get();
 
 
-		//for (auto i : dotsInRange) {
-		//	printf("%i, ", i);
-		//}
-		//printf("\n");
-		//for (auto i : manualClosePoints) {
-		//	printf("%i, ", i);
-		//}
-		//printf("\n");
+		//printTree(theTree);
+
 
 		//printf("\n");
 		////printTree(theTree);
@@ -529,7 +563,7 @@ int main()
 		if (status)printf("dp kernel 1 %i\n", status);
 		//printf("set arg 2 status: %i\n", status);
 
-		printf("\n\ngetting dots in range on GPU\n");
+		//printf("\n\ngetting dots in range on GPU\n");
 		size_t globalWorkSize[3] = {numberOfPoints, 1, 1 };
 		cl_event* kernelEvent = new cl_event();
 		status = clEnqueueNDRangeKernel(cmdQueue, computeDPKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
@@ -537,7 +571,7 @@ int main()
 		clWaitForEvents(1, kernelEvent);
 		clFinish(*kdConCon.cmdQueue);
 
-		//cin.get();
+		cin.get();
 
 
 

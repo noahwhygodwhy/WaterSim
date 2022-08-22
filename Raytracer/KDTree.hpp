@@ -43,6 +43,8 @@ struct KDConstructionContext {
 	cl_mem* clTheTree;
 	cl_command_queue* cmdQueue;
 	cl_kernel* kdTreeKernel;
+	cl_kernel* bitonicKernel;
+	cl_mem* clnodeIndexList;
 };
 
 
