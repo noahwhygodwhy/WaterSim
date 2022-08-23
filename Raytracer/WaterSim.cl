@@ -42,32 +42,81 @@ void gSwap(__global unsigned int *a, __global unsigned int *b) {
   *a = *b;
   *b = t;
 }
+
+uint nextPowerOfTwo(uint x) {
+    x -= 1;
+    x |= x >> 16;
+    x |= x >> 8;
+    x |= x >> 4;
+    x |= x >> 2;
+    x |= x >> 1;
+    x += 1;
+
+    return x;
+}
+
+
+
+//this bitonic sort was essentially written by riley broderick
+//I tried but god damn I could not get it to function
 __kernel void bitonicSort(
     __global struct Particle *particles,
     __global unsigned int *totalList,
     __global unsigned int *indexOfNodeList,
-    int axis
+    int axis,
+    int blockWidth,
+    int reflect
 ){
 
     size_t numParticles = get_global_size(0);
-    int idx = get_global_id(0);
-    printf("idx %i\n", idx);
-    for (int k = 2; k <= numParticles; k *= 2) {      // k is doubled every iteration
-        for (int j = k / 2; j > 0; j /= 2) { // j is halved at every iteration, with
-                                            // truncation of fractional parts
-            int l = idx ^ j; // in C-like languages this is "i ^ j"
-            if (indexOfNodeList[idx] == indexOfNodeList[l] && l > idx) 
-            {
-                if (!(((idx & k) == 0) ^
-                    (indexF4(&particles[totalList[idx]].position, axis) >
-                    indexF4(&particles[totalList[l]].position, axis))) //last 3 lines of if are for actualy bitonic sort
-                ) {
-                    gSwap(totalList + idx, totalList + l);
-                }
+    //int idx = get_global_id(0);
+
+    uint mask = ((uint)(1) << blockWidth) - 1;
+    uint offset = (uint)(1) << blockWidth;
+    uint limit = nextPowerOfTwo(numParticles) / 2;
+
+    for (
+            uint i = get_local_id(0) + (get_local_size(0)*get_group_id(0));
+            i < limit;
+            i += get_local_size(0) * get_num_groups(0)
+    ) {
+        uint j = ((i & ~mask) << 1) + (i & mask);
+        uint k = ((i & ~mask) << 1) + ((reflect ? ~i : i) & mask) + offset;
+
+        if (k < numParticles) {
+            
+            float jVal = indexF4(&particles[totalList[j]].position, axis);
+            float kVal = indexF4(&particles[totalList[k]].position, axis);
+            if (jVal > kVal) {
+                
+                int swapSpace = totalList[j];
+                totalList[j]= totalList[k];
+                totalList[k] = swapSpace;
             }
-            barrier(CLK_GLOBAL_MEM_FENCE);
         }
     }
+
+    // int l = idx ^ j; 
+    // if ((indexOfNodeList[idx] == indexOfNodeList[l]) && (l > idx))  
+    // {
+    //     float idxVal = indexF4(&particles[totalList[idx]].position, axis);
+    //     float lVal = indexF4(&particles[totalList[l]].position, axis);
+
+    //     if((idx&k)==0){
+    //         if(idxVal > lVal) {
+    //             int swapSpace = totalList[idx];
+    //             totalList[idx]= totalList[l];
+    //             totalList[l] = swapSpace;
+    //         }
+    //     } else {
+    //         if(idxVal < lVal) {
+    //             int swapSpace = totalList[idx];
+    //             totalList[idx]= totalList[l];
+    //             totalList[l] = swapSpace;
+    //         }
+    //     }
+    // }
+            
 }
 
 __kernel void computeDP(

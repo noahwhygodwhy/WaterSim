@@ -34,7 +34,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 20;
+constexpr uint32_t MAX_PARTICLES = 14;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -500,9 +500,9 @@ int main()
 
 		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, NULL);
 		if (status)printf("reading in the tree %i\n", status);
-		/*printTree(theTree);
+		printTree(theTree);
 
-		cin.get();*/
+		//cin.get();
 
 
 		//printf("getting dots in range\n");
