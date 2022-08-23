@@ -59,16 +59,17 @@ uint nextPowerOfTwo(uint x) {
 
 //this bitonic sort was essentially written by riley broderick
 //I tried but god damn I could not get it to function
+//although to be fair, he claimed ignorance as well
 __kernel void bitonicSort(
     __global struct Particle *particles,
     __global unsigned int *totalList,
     __global unsigned int *indexOfNodeList,
     int axis,
     int blockWidth,
-    int reflect
+    int reflect,
+    int numParticles
 ){
 
-    size_t numParticles = get_global_size(0);
     //int idx = get_global_id(0);
 
     uint mask = ((uint)(1) << blockWidth) - 1;
@@ -83,7 +84,7 @@ __kernel void bitonicSort(
         uint j = ((i & ~mask) << 1) + (i & mask);
         uint k = ((i & ~mask) << 1) + ((reflect ? ~i : i) & mask) + offset;
 
-        if (k < numParticles) {
+        if (indexOfNodeList[j] == indexOfNodeList[k] && k < numParticles) {
             
             float jVal = indexF4(&particles[totalList[j]].position, axis);
             float kVal = indexF4(&particles[totalList[k]].position, axis);
@@ -155,7 +156,7 @@ __kernel void computeDP(
     bool lastParent = false;
     
 	//printf("gpu version:\n");
-    printf("gpu:\n");
+    //printf("gpu:\n");
     while (currIdx > 0) { // or while(true)???
         //printf("currIdx: %i\n", currIdx);
         //printf("traveledNodes: %i\n", traveledNodes);
@@ -170,7 +171,7 @@ __kernel void computeDP(
         float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
         if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
-            printf("%i, ", currNode.pointIdx);
+            //printf("%i, ", currNode.pointIdx);
             particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
         // DO CALCULATIONS INVOLVING NEIGHBORS HERE
         }
@@ -249,7 +250,7 @@ __kernel void computeDP(
         //     greaterTraversals = greaterTraversals>>1;
         // }
     }
-    printf("\n");
+    //printf("\n");
   // positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
 }
 
