@@ -230,8 +230,6 @@ void makeKDTree(const Particle* particles, const size_t& numberOfPoints, const K
 	cin.get();*/
 
 	for (int layer = 0; layer < totalLayers; layer++) {
-		
-
 		//printf("\n\nlayer %i\n", layer);
 		int axis = layer % 3;
 
@@ -253,7 +251,7 @@ void makeKDTree(const Particle* particles, const size_t& numberOfPoints, const K
 				status = clSetKernelArg(*kdConCon.bitonicKernel, 6, sizeof(int), &five);
 				if (status)printf("bitonic kernel 0 %i\n", status);
 
-				//printf("enqueueing kernel\n");
+				// printf("enqueueing kernel %u, %u\n", i, j);
 				status = clEnqueueNDRangeKernel(*kdConCon.cmdQueue, *kdConCon.bitonicKernel, 1, NULL, bitonicGlobalWorkSize, NULL, 0, NULL, kernelEvent);
 				if (status)printf("bitonic execution %i, %i\n", layer, status);
 				clWaitForEvents(1, kernelEvent);
@@ -263,11 +261,11 @@ void makeKDTree(const Particle* particles, const size_t& numberOfPoints, const K
 
 		clFinish(*kdConCon.cmdQueue);
 
-		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTotalList, CL_TRUE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, NULL);
+		/*status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTotalList, CL_TRUE, 0, sizeof(int32_t) * numberOfPoints, totalList, 0, NULL, NULL);
 		if (status)printf("kd read 5 %i\n", status);
 		status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clnodeIndexList, CL_TRUE, 0, sizeof(int32_t) * numberOfPoints, nodeIndexList, 0, NULL, NULL);
 		if (status)printf("bitonic write 1 %i\n", status);
-		clFinish(*kdConCon.cmdQueue);
+		clFinish(*kdConCon.cmdQueue);*/
 
 		/*for (int fda = 0; fda < numberOfPoints; fda++) {
 			int jk = totalList[fda];
@@ -275,7 +273,7 @@ void makeKDTree(const Particle* particles, const size_t& numberOfPoints, const K
 		}*/
 		//printf("\n");
 		//printf("sorted\n");
-		//cin.get();
+		//ci();
 
 		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3 + (layer%2), sizeof(cl_mem), kdConCon.clQA);//qa is input on even, output on odd, (kernel args 3 and 4)
 		status = clSetKernelArg(*kdConCon.kdTreeKernel, 3 + ((layer+1)%2), sizeof(cl_mem), kdConCon.clQB);

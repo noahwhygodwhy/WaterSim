@@ -6,8 +6,12 @@
 
 // page 29
 
+//TODO: tweak these
 __constant float NEIGHBOR_RADIUS = 3.0f;
-__constant float NEIGHBOR_RADIUS_SQUARED = 9.0f;
+__constant float REST_DENSITY = 1.0f;
+__constant float GAS_STIFFNESS = 1.0f;
+__constant float GRAVITY = -9.8f;
+__constant float PARTICLE_MASS = 1.0f;
 
 float indexF3(float3 a, int index) {
     switch (index) {
@@ -59,7 +63,8 @@ uint nextPowerOfTwo(uint x) {
 
 //this bitonic sort was essentially written by riley broderick
 //I tried but god damn I could not get it to function
-//although to be fair, he claimed ignorance as well
+//although to be fair, he claimed ignorance to how it works as well
+//just that it he was able to get it working
 __kernel void bitonicSort(
     __global struct Particle *particles,
     __global unsigned int *totalList,
@@ -70,16 +75,15 @@ __kernel void bitonicSort(
     int numParticles
 ){
 
-    //int idx = get_global_id(0);
-
     uint mask = ((uint)(1) << blockWidth) - 1;
     uint offset = (uint)(1) << blockWidth;
     uint limit = nextPowerOfTwo(numParticles) / 2;
-
+    uint init = get_local_id(0)+(get_local_size(0)*get_group_id(0));
+    uint iter = get_local_size(0) * get_num_groups(0);
     for (
-            uint i = get_local_id(0) + (get_local_size(0)*get_group_id(0));
+            uint i = init;
             i < limit;
-            i += get_local_size(0) * get_num_groups(0)
+            i += iter
     ) {
         uint j = ((i & ~mask) << 1) + (i & mask);
         uint k = ((i & ~mask) << 1) + ((reflect ? ~i : i) & mask) + offset;
@@ -95,100 +99,69 @@ __kernel void bitonicSort(
                 totalList[k] = swapSpace;
             }
         }
-    }
-
-    // int l = idx ^ j; 
-    // if ((indexOfNodeList[idx] == indexOfNodeList[l]) && (l > idx))  
-    // {
-    //     float idxVal = indexF4(&particles[totalList[idx]].position, axis);
-    //     float lVal = indexF4(&particles[totalList[l]].position, axis);
-
-    //     if((idx&k)==0){
-    //         if(idxVal > lVal) {
-    //             int swapSpace = totalList[idx];
-    //             totalList[idx]= totalList[l];
-    //             totalList[l] = swapSpace;
-    //         }
-    //     } else {
-    //         if(idxVal < lVal) {
-    //             int swapSpace = totalList[idx];
-    //             totalList[idx]= totalList[l];
-    //             totalList[l] = swapSpace;
-    //         }
-    //     }
-    // }
-            
+    }            
 }
+
+
+__constant float POLY6_LEFT_SIDE = 1.56668147106f;
+__constant float SPIKY_LEFT_SIDE = 4.77464829f;
+__constant float VISCOSITY_LEFT_SIDE = 2.38732415f;
+float Wpoly6(float r2, float h2, float h9) {
+    float inter = pow(h2-r2, 3);
+    return (POLY6_LEFT_SIDE * inter)/h9;
+}
+
+float Wspiky(float r, float h, float h6){
+    float inter = pow(h-r, 3);
+    return (SPIKY_LEFT_SIDE * inter)/h6;
+}
+
+float Wviscosity(float r, float h, float h2, float h3) {
+    float first = -(r*r*r)/(2*h3);
+    float second = (r*r)/h2;
+    float third = h/(2*r);
+    return first + second + third - 1;
+}
+
 
 __kernel void computeDP(
     __global struct Particle *particles,
-    __global struct KDNode *theTree, 
-    float deltaTime) {
+    __global struct KDNode *theTree) {
 
     int idx = get_global_id(0);
-    //particles[idx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);
-    //return;
 
-    particles[idx].velocity = (float4)(0.0, 0.0, 1.0, 0.0);
-
-    if (idx != 2) {
-        return;
-    }
-    particles[idx].velocity = (float4)(1.0, 0.0, 0.0, 0.0);
     uint currIdx = 1;
     float3 theBall = particles[idx].position.xyz;
 
-    // you can backtrack cause its stored implicitly, you can math the parent
-    // node, and choose to ignore children
-
     uint lesserTraversals = 0;
     uint greaterTraversals = 0;
-
     int traveledNodes = 0;
-
-    // for(int i = 0; i < 60; i++) {
-    //     struct KDNode c = theTree[i];
-    //     printf("i: %i, idx: %u, V: %f, L: %i, R: %i\n", i, c.pointIdx, c.value, c.greaterChild, c.lesserChild);
-    // }
-
-    // return;
+    float h = NEIGHBOR_RADIUS;
+    float h9 = pow(NEIGHBOR_RADIUS, 9);
+    float h2 = pow(NEIGHBOR_RADIUS, 2);
 
     bool lastParent = false;
-    
-	//printf("gpu version:\n");
-    //printf("gpu:\n");
-    while (currIdx > 0) { // or while(true)???
-        //printf("currIdx: %i\n", currIdx);
-        //printf("traveledNodes: %i\n", traveledNodes);
-        //traveledNodes++;
-        //printf("visiting tree index %u\n", currIdx);
+    float newDensity = 0;
+    while (currIdx > 0) { 
         struct KDNode currNode = theTree[currIdx - 1];
-
-		//printf("visiting tree index %u\n", currIdx-1);
-
         int layer = (int)(floor(log2((float)(currIdx))));
         int axis = layer % 3;
         float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
-        if ((dsquared <= NEIGHBOR_RADIUS_SQUARED) && (currNode.pointIdx != idx) && !lastParent) {
+        if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
-            //printf("%i, ", currNode.pointIdx);
-            particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
-        // DO CALCULATIONS INVOLVING NEIGHBORS HERE
+            newDensity += PARTICLE_MASS* Wpoly6(dsquared, h2, h9);
+            
+            //particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
         }
-
 
         float val = indexF3(theBall, axis);
         int tooCloseToCall = fabs(val - currNode.value) <= NEIGHBOR_RADIUS;
 
         int possiblyGreater = (tooCloseToCall || (val > currNode.value)) && currNode.greaterChild >= 0;
         int possiblyLesser = (tooCloseToCall || (val < currNode.value)) && currNode.lesserChild >= 0;
-        //printf("%f, %f\n",val, currNode.value);
-        //printf("%u, %u, %i, %u\n", lesserTraversals, greaterTraversals, possiblyGreater, possiblyLesser);
 
         lastParent = false;
         if(possiblyLesser && !(1&lesserTraversals)) {
-              
-              //printf("going lesser\n");
                 lesserTraversals |= 1;
                 lesserTraversals = lesserTraversals<<1;
                 greaterTraversals = greaterTraversals<<1;
@@ -196,7 +169,6 @@ __kernel void computeDP(
             }
         else {
             if (possiblyGreater && !(1 & greaterTraversals)) {
-                //printf("going greater\n");
                 greaterTraversals |= 1;
                 lesserTraversals = lesserTraversals << 1;
                 greaterTraversals = greaterTraversals << 1;
@@ -204,99 +176,79 @@ __kernel void computeDP(
             }
             else {
                 lastParent = true;
-                //printf("going parent\n");
                 currIdx = currIdx / 2;
                 lesserTraversals = lesserTraversals >> 1;
                 greaterTraversals = greaterTraversals >> 1;
             }
         }
-
-
-
-
-        // int goingLesser = possiblyLesser && !(1 & lesserTraversals);
-        // int goingGreater = !goingLesser && possiblyGreater && !(1 & greaterTraversals);
-        // int goingParent = !goingLesser && !goingGreater;
-
-        // lesserTraversals = lesserTraversals << (goingGreater || goingLesser);
-        // greaterTraversals = greaterTraversals << (goingGreater || goingLesser);
-        // lesserTraversals = lesserTraversals >> goingParent;
-        // greaterTraversals = greaterTraversals >> goingParent;
-
-        // currIdx = (goingLesser * (currNode.lesserChild+1)) +
-        //         (goingGreater * (currNode.greaterChild+1)) +
-        //         (goingParent * (currIdx >> 1));
-
-
-        //         // 
-        //printf("%i, %i, %i, %u\n", goingLesser, goingGreater, goingParent, currIdx);
-
-        // if(possiblyLesser && !(1&lesserTraversals)) {
-        //     lesserTraversals &= 1;
-        //     lesserTraversals = lesserTraversals<<1;
-        //     greaterTraversals = greaterTraversals<<1;
-        //     currIdx = currNode.lesserChild;
-        // }
-        // else
-        // if(possiblyGreater && !(1&greaterTraversals)) {
-        //     greaterTraversals &= 1;
-        //     lesserTraversals = lesserTraversals<<1;
-        //     greaterTraversals = greaterTraversals<<1;
-        //     currIdx = currNode.greaterChild;
-        // }
-        // else {
-        //     currIdx = currIdx/2;
-        //     lesserTraversals = lesserTraversals>>1;
-        //     greaterTraversals = greaterTraversals>>1;
-        // }
     }
-    //printf("\n");
-  // positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
+    particles[idx].density = newDensity;
+    particles[idx].pressure = GAS_STIFFNESS * (newDensity-REST_DENSITY);
 }
 
-// __kernel void compute(
-//     __global float3* positions,
-//     //__global float3* velocities,
-//     __global float* densities,
-//     __global float* pressures,
-//     __global struct KDNode* theTree,
-//     float deltaTime
-//     )  {
-//     int idx = get_global_id(0);
+__kernel void computeForce(
+    __global struct Particle *particles,
+    __global struct KDNode *theTree,
+    float deltaTime) {
 
-//     positions[idx] = positions[idx]+(velocities[idx]*deltaTime);
-// }
+    int idx = get_global_id(0);
+
+    uint currIdx = 1;
+    float3 theBall = particles[idx].position.xyz;
+
+    uint lesserTraversals = 0;
+    uint greaterTraversals = 0;
+    int traveledNodes = 0;
+    float h = NEIGHBOR_RADIUS;
+    //float h9 = pow(NEIGHBOR_RADIUS, 9);
+    float h2 = pow(NEIGHBOR_RADIUS, 2);
+
+    bool lastParent = false;
+    
+    float fPressure = 0;
+    float fViscosity = 0;
+
+    while (currIdx > 0) { 
+        struct KDNode currNode = theTree[currIdx - 1];
+        int layer = (int)(floor(log2((float)(currIdx))));
+        int axis = layer % 3;
+        float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
+        if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
+            float distance = sqrt(dsquared);
+            //TODO: the force things on page 35 of https://www.diva-portal.org/smash/get/diva2:703754/FULLTEXT01.pdf
+        }
+
+        float val = indexF3(theBall, axis);
+        int tooCloseToCall = fabs(val - currNode.value) <= NEIGHBOR_RADIUS;
+
+        int possiblyGreater = (tooCloseToCall || (val > currNode.value)) && currNode.greaterChild >= 0;
+        int possiblyLesser = (tooCloseToCall || (val < currNode.value)) && currNode.lesserChild >= 0;
+
+        lastParent = false;
+        if(possiblyLesser && !(1&lesserTraversals)) {
+                lesserTraversals |= 1;
+                lesserTraversals = lesserTraversals<<1;
+                greaterTraversals = greaterTraversals<<1;
+                currIdx = currNode.lesserChild+1;
+            }
+        else {
+            if (possiblyGreater && !(1 & greaterTraversals)) {
+                greaterTraversals |= 1;
+                lesserTraversals = lesserTraversals << 1;
+                greaterTraversals = greaterTraversals << 1;
+                currIdx = currNode.greaterChild + 1;
+            }
+            else {
+                lastParent = true;
+                currIdx = currIdx / 2;
+                lesserTraversals = lesserTraversals >> 1;
+                greaterTraversals = greaterTraversals >> 1;
+            }
+        }
+    }
 
 
-// https://en.wikipedia.org/wiki/Bitonic_sorter
-// void bitonicSort(int start, int end, int axis,
-//                  __global struct Particle *particles,
-//                  __global unsigned int *totalList) {
-//   // bool dbg = (get_global_id(0)==0);
-
-//   // if(dbg)printf("start: %i, end: %i, n: %i\n", start, end, (start-end)+1);
-
-//   int n = (end - start) + 1;
-
-//   for (int k = 2; k <= n; k *= 2) {      // k is doubled every iteration
-//     for (int j = k / 2; j > 0; j /= 2) { // j is halved at every iteration, with
-//                                          // truncation of fractional parts
-//       for (int i = 0; i < n; i++) {
-//         int l = i ^ j; // in C-like languages this is "i ^ j"
-
-//         // printf("idx: %i, l: %i, i: %i, k: %i", get_global_id(0), l, i, k);
-
-//         if (l > i) {
-//           if (!(((i & k) == 0) ^
-//                 (indexF4(&particles[totalList[i]].position, axis) >
-//                  indexF4(&particles[totalList[l]].position, axis)))) {
-//             gSwap(totalList + i, totalList + l);
-//           }
-//         }
-//       }
-//     }
-//   }
-// }
+}
 
 __kernel void makeKDTree(__global struct Particle *particles,
                          __global unsigned int *totalList,

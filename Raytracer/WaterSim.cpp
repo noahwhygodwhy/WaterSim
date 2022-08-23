@@ -34,7 +34,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 14000;
+constexpr uint32_t MAX_PARTICLES = 2000;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -208,10 +208,10 @@ int main()
 		float zR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.z;
 
 		initialParticles[numberOfPoints] = Particle(
-			fvec4(xR, yR, zR, 10.0f),
-			fvec4(10.0f),
-			fvec4(10.0f),
-			fvec4(10.0f)
+			fvec4(xR, yR, zR, 0),
+			fvec4(0),
+			0.0f,
+			0.0f
 		);
 
 		numberOfPoints++;
@@ -233,9 +233,9 @@ int main()
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, velocity));
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, density));
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, density));
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, pressure));
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, pressure));
 	glEnableVertexAttribArray(3);
 
 	cl_mem clParticles = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, particleVBO, &status);
@@ -441,19 +441,24 @@ int main()
 
 	//fvec4* readInPositions = new fvec4[numberOfBalls]();
 
+	int fps = 30;
 
+	double deltaTime = 1.0 / double(fps);
+	double currentFrame = 0.0;
 	glPointSize(5.0f);
-	while (!glfwWindowShouldClose(window)) {
+	while(!glfwWindowShouldClose(window)) {
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		frameCounter++;
-		double currentFrame = glfwGetTime();
-		deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
+		currentFrame += deltaTime;
+		//double currentFrame = glfwGetTime();
+		//deltaTime = currentFrame - lastFrame;
+		//lastFrame = currentFrame;
+		//printf("delta time: %f\n", deltaTime);
 
-		if (int(currentFrame) > lastSecondFrameCount) {
+		/*if (int(currentFrame) > lastSecondFrameCount) {
 			lastSecondFrameCount = int(currentFrame);
 			float sum = 0;
 			for (float f : frameTimes) {
@@ -461,7 +466,7 @@ int main()
 			}
 			printf("fps: ~%f\n", sum / 30.0f);
 		}
-		frameTimes[frameCounter % 30] = 1.0f / float(deltaTime);
+		frameTimes[frameCounter % 30] = 1.0f / float(deltaTime);*/
 
 
 		/*glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
