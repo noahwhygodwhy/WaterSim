@@ -6,11 +6,18 @@
 
 // page 29
 
-//TODO: tweak these
-__constant float NEIGHBOR_RADIUS = 3.0f;
+// //TODO: tweak these
+// __constant float NEIGHBOR_RADIUS = 0.5f;
+// __constant float REST_DENSITY = 1.0f;
+// __constant float GAS_STIFFNESS = 1.0f;
+// __constant float3 GRAVITY = (float3)(0, -0.1f, 0);
+// __constant float PARTICLE_MASS = 1.0f;
+
+//tweaked
+__constant float NEIGHBOR_RADIUS = 1.0f;
 __constant float REST_DENSITY = 1.0f;
 __constant float GAS_STIFFNESS = 1.0f;
-__constant float GRAVITY = -9.8f;
+__constant float3 GRAVITY = (float3)(0, 0.0f, 0);
 __constant float PARTICLE_MASS = 1.0f;
 
 float indexF3(float3 a, int index) {
@@ -37,7 +44,7 @@ float indexF4(__global float4* a, int index) {
 }
 
 float vector_length_2(float3 c) {
-    return (c.x * c.x) + (c.y + c.y) + (c.z * c.z);
+    return (c.x * c.x) + (c.y * c.y) + (c.z * c.z);
 }
 
 void gSwap(__global unsigned int *a, __global unsigned int *b) {
@@ -103,29 +110,29 @@ __kernel void bitonicSort(
 
 
 __constant float POLY6_LEFT_SIDE = 1.56668147106f;
-__constant float SPIKY_LEFT_SIDE = 4.77464829f;
-__constant float VISCOSITY_LEFT_SIDE = 2.38732415f;
+__constant float SPIKY_LEFT_SIDE = -14.3239449f;
+__constant float VISCOSITY_LEFT_SIDE = 14.3239449f;
 float Wpoly6(float r2, float h2, float h9) {
     float inter = pow(h2-r2, 3);
     return (POLY6_LEFT_SIDE * inter)/h9;
 }
-
-float Wspiky(float r, float h, float h6){
-    float inter = pow(h-r, 3);
-    return (SPIKY_LEFT_SIDE * inter)/h6;
+float3 deltaWspiky(float3 theVec, float r, float h, float h6){
+    float3 inter = (theVec/r) * ((h-r)*(h-r));
+    return (VISCOSITY_LEFT_SIDE*inter)/h6;
 }
 
-float Wviscosity(float r, float h, float h2, float h3) {
-    float first = -(r*r*r)/(2*h3);
-    float second = (r*r)/h2;
-    float third = h/(2*r);
-    return first + second + third - 1;
+float deltaTwoWviscosity(float r, float h, float h6) {
+    float inter = (h-r);
+    return (VISCOSITY_LEFT_SIDE * inter)/h6;
 }
+
+
 
 
 __kernel void computeDP(
     __global struct Particle *particles,
-    __global struct KDNode *theTree) {
+    __global struct KDNode *theTree,
+    int frameNumber) {
 
     int idx = get_global_id(0);
 
@@ -150,7 +157,7 @@ __kernel void computeDP(
         float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
-            newDensity += PARTICLE_MASS* Wpoly6(dsquared, h2, h9);
+            newDensity += PARTICLE_MASS* Wpoly6(distance, h2, h9);
             
             //particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
         }
@@ -184,13 +191,13 @@ __kernel void computeDP(
         }
     }
     particles[idx].density = newDensity;
+    //printf("idx: %i,density %f\n", idx, newDensity);
     particles[idx].pressure = GAS_STIFFNESS * (newDensity-REST_DENSITY);
 }
 
 __kernel void computeForce(
     __global struct Particle *particles,
-    __global struct KDNode *theTree,
-    float deltaTime) {
+    __global struct KDNode *theTree) {
 
     int idx = get_global_id(0);
 
@@ -202,8 +209,8 @@ __kernel void computeForce(
     int traveledNodes = 0;
     float h = NEIGHBOR_RADIUS;
     //float h9 = pow(NEIGHBOR_RADIUS, 9);
-    float h2 = pow(NEIGHBOR_RADIUS, 2);
-
+    float h2 = pow(h, 2);
+    float h6 = pow(h, 6);
     bool lastParent = false;
     
     float3 fPressure = (float3)(0.0f, 0.0f, 0.0f);
@@ -217,8 +224,13 @@ __kernel void computeForce(
         float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
+            float pLeftSide = PARTICLE_MASS * ((particles[idx].pressure + particles[currNode.pointIdx].pressure)/(2*particles[currNode.pointIdx].pressure));
+            float3 vLeftSide = PARTICLE_MASS * ((particles[idx].velocity - particles[currNode.pointIdx].velocity).xyz/(particles[currNode.pointIdx].pressure));
             
+            float3 fPressure = fPressure - pLeftSide*deltaWspiky(theVec, distance, h, h6);
+            float3 fViscosity = fViscosity + vLeftSide* deltaTwoWviscosity(distance, h, h6);
 
+            //float deltaTwoWviscosity(float4 theVec, float r, float h, float h6) {
             //TODO: the force things on page 35 of https://www.diva-portal.org/smash/get/diva2:703754/FULLTEXT01.pdf
         }
 
@@ -250,7 +262,34 @@ __kernel void computeForce(
             }
         }
     }
+    //f=m*a
+    float3 fGravity = GRAVITY * PARTICLE_MASS;
+    //particles[idx].force = (float4)(0 + 0 + fGravity, 0);
+    //printf("updated force of %i: %f, %f, %f\n",idx, fGravity.x, fGravity.y, fGravity.z);
+    particles[idx].force = (float4)(fPressure + fViscosity + fGravity, 0);
 
+}
+
+__kernel void updateVX(
+    __global struct Particle *particles,
+    float deltaTime
+){
+    int idx = get_global_id(0);
+    //if(idx == 0){printf("delta time %f\n", deltaTime);}
+
+    
+    particles[idx].velocity += particles[idx].force/PARTICLE_MASS;//particles[idx].pressure;
+    particles[idx].position = particles[idx].position + (particles[idx].velocity * deltaTime);
+    
+    printf("particle %i moving at %f, %f, %f, at new position %f, %f, %f due to pressure %f and force %f, %f %f\n", 
+    idx,
+    particles[idx].velocity.x, particles[idx].velocity.y, particles[idx].velocity.z,
+    particles[idx].position.x, particles[idx].position.y, particles[idx].position.z,
+    particles[idx].pressure,
+    particles[idx].force.x, particles[idx].force.y, particles[idx].force.z
+    );
+    // particles[idx].position = min(particles[idx].position, (float4)(9, 9, 9, 0));
+    // particles[idx].position = max(particles[idx].position, (float4)(1, 1, 1, 0));
 
 }
 

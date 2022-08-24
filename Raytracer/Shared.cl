@@ -32,14 +32,15 @@ STRUCT_HEADER KDNode {
 	unsigned int pointIdx; //index into balls
 	int greaterChild; //index into the tree
 	int lesserChild;//index into the tree
-};
+} KDNode;
+
 STRUCT_HEADER Particle {
     float4 position;
     float4 velocity;
     float4 force;
     float density;
     float pressure;
-};
+} Particle;
 
 
 

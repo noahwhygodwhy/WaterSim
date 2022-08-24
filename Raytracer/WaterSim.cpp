@@ -5,9 +5,8 @@
 typedef float4 fvec4;
 typedef float3 fvec3;
 
-//#define CIN
+#define CIN
 #define CPP
-//#include "sharedStructs.cl"
 
 using namespace std;
 using namespace std::filesystem;
@@ -34,7 +33,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 2000;
+constexpr uint32_t MAX_PARTICLES = 100;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -268,6 +267,10 @@ int main()
 	if (status)printf("bitonic sort kernel %i\n", status);
 	cl_kernel computeDPKernel = clCreateKernel(program, "computeDP", &status);
 	if (status)printf("computedp kernel %i\n", status);
+	cl_kernel computeForceKernel = clCreateKernel(program, "computeForce", &status);
+	if (status)printf("computedp kernel %i\n", status);
+	cl_kernel updateVXKernel = clCreateKernel(program, "updateVX", &status);
+	if (status)printf("updateVX kernel %i\n", status);
 	cl_kernel kdTreeKernel = clCreateKernel(program, "makeKDTree", &status);
 	if (status)printf("kdtreekernel %i\n", status);
 
@@ -293,6 +296,14 @@ int main()
 	status = clSetKernelArg(computeDPKernel, 1, sizeof(cl_mem), &clTheTree);
 	if (status)printf("dp kernel 1 %i\n", status);
 
+	status = clSetKernelArg(computeForceKernel, 0, sizeof(cl_mem), &clParticles);
+	if (status)printf("dp kernel 0 %i\n", status);
+	status = clSetKernelArg(computeForceKernel, 1, sizeof(cl_mem), &clTheTree);
+	if (status)printf("dp kernel 1 %i\n", status);
+
+	status = clSetKernelArg(updateVXKernel, 0, sizeof(cl_mem), &clParticles);
+	if (status)printf("vx kernel 0 %i\n", status);
+
 	status = clSetKernelArg(*kdConCon.kdTreeKernel, 0, sizeof(cl_mem), &clParticles);
 	if (status)printf("kd kernel 0 %i\n", status);
 	status = clSetKernelArg(*kdConCon.kdTreeKernel, 2, sizeof(cl_mem), &clTheTree);
@@ -306,7 +317,7 @@ int main()
 	if (status)printf("bitonic kernel 0 %i\n", status);
 	status = clSetKernelArg(*kdConCon.bitonicKernel, 2, sizeof(cl_mem), &clNodeIndexList);
 	if (status)printf("bitonic kernel 0 %i\n", status);
-	
+
 
 	size_t globalWorkSize[3] = { MAX_PARTICLES, 1, 1 };
 	size_t localWorkSize[3] = { NULL, NULL, NULL };
@@ -413,7 +424,9 @@ int main()
 	double deltaTime = 1.0 / double(fps);
 	double currentFrame = 0.0;
 	glPointSize(5.0f);
+	int frameNumber = 0;
 	while(!glfwWindowShouldClose(window)) {
+		frameNumber++;
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -421,33 +434,35 @@ int main()
 		frameCounter++;
 		currentFrame += deltaTime;
 		
+		if (frameNumber > 0) {
 
-		int32_t lookingIndex = 13;
+			makeKDTree(initialParticles, numberOfPoints, kdConCon);
 
+			float floatDeltaTime = float(deltaTime);
 
-		float theRange = 3.0f;
+			printf("frame number: %i\n", frameNumber);
+			status = clSetKernelArg(computeDPKernel, 2, sizeof(int), &frameNumber);
+			if (status)printf("vx kernel 1 %i\n", status);
 
+			size_t globalWorkSize[3] = { numberOfPoints, 1, 1 };
+			cl_event* kernelEvent = new cl_event();
+			status = clEnqueueNDRangeKernel(cmdQueue, computeDPKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
+			if (status)printf("cd kernel execution %i\n", status);
+			clWaitForEvents(1, kernelEvent);
+			clFinish(*kdConCon.cmdQueue);
 
+			status = clEnqueueNDRangeKernel(cmdQueue, computeForceKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
+			if (status)printf("cd kernel execution %i\n", status);
+			clWaitForEvents(1, kernelEvent);
+			clFinish(*kdConCon.cmdQueue);
 
-		makeKDTree(initialParticles, numberOfPoints, kdConCon);
-
-		
-
-
-		float floatDeltaTime = float(deltaTime);
-
-		status = clSetKernelArg(computeDPKernel, 2, sizeof(float), &floatDeltaTime);
-		if (status)printf("dp kernel 2 %i\n", status);
-		status = clSetKernelArg(computeDPKernel, 1, sizeof(cl_mem), &clTheTree);
-		if (status)printf("dp kernel 1 %i\n", status);
-
-		size_t globalWorkSize[3] = {numberOfPoints, 1, 1 };
-		cl_event* kernelEvent = new cl_event();
-		status = clEnqueueNDRangeKernel(cmdQueue, computeDPKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
-		if (status)printf("cd kernel execution %i\n", status);
-		clWaitForEvents(1, kernelEvent);
-		clFinish(*kdConCon.cmdQueue);
-
+			status = clSetKernelArg(updateVXKernel, 1, sizeof(float), &floatDeltaTime);
+			if (status)printf("vx kernel 1 %i\n", status);
+			status = clEnqueueNDRangeKernel(cmdQueue, updateVXKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
+			if (status)printf("cd kernel execution %i\n", status);
+			clWaitForEvents(1, kernelEvent);
+			clFinish(*kdConCon.cmdQueue);
+		}
 
 		vec3 eye = vec3(sin(currentFrame/2.0f) * boxSize.x, boxSize.y/2.0f, cos(currentFrame/2.0f) * boxSize.z) + (boxSize/2.0f);
 
