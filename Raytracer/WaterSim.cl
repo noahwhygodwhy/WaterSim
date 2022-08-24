@@ -36,8 +36,7 @@ float indexF4(__global float4* a, int index) {
   }
 }
 
-float distance_squared(float3 a, float3 b) {
-    float3 c = a - b;
+float vector_length_2(float3 c) {
     return (c.x * c.x) + (c.y + c.y) + (c.z * c.z);
 }
 
@@ -146,7 +145,9 @@ __kernel void computeDP(
         struct KDNode currNode = theTree[currIdx - 1];
         int layer = (int)(floor(log2((float)(currIdx))));
         int axis = layer % 3;
-        float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
+        
+        float3 theVec = particles[currNode.pointIdx].position.xyz-theBall;
+        float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
             newDensity += PARTICLE_MASS* Wpoly6(dsquared, h2, h9);
@@ -205,16 +206,19 @@ __kernel void computeForce(
 
     bool lastParent = false;
     
-    float fPressure = 0;
-    float fViscosity = 0;
+    float3 fPressure = (float3)(0.0f, 0.0f, 0.0f);
+    float3 fViscosity = (float3)(0.0f, 0.0f, 0.0f);
 
     while (currIdx > 0) { 
         struct KDNode currNode = theTree[currIdx - 1];
         int layer = (int)(floor(log2((float)(currIdx))));
         int axis = layer % 3;
-        float dsquared = distance_squared(theBall, particles[currNode.pointIdx].position.xyz);
+        float3 theVec = particles[currNode.pointIdx].position.xyz-theBall;
+        float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
             float distance = sqrt(dsquared);
+            
+
             //TODO: the force things on page 35 of https://www.diva-portal.org/smash/get/diva2:703754/FULLTEXT01.pdf
         }
 
