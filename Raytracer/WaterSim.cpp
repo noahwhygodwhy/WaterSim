@@ -33,7 +33,7 @@ double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
 constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 100;
+constexpr uint32_t MAX_PARTICLES = 1000;
 //constexpr uint32_t KD_MAX_LAYERS = 20;
 
 
@@ -188,8 +188,7 @@ int main()
 			fvec4(xR, yR, zR, 0),
 			fvec4(0),
 			fvec4(0),
-			0.0f,
-			0.0f
+			fvec4(0)
 		);
 
 		numberOfPoints++;
@@ -207,16 +206,17 @@ int main()
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * MAX_PARTICLES, initialParticles, GL_STATIC_DRAW);
 
 
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, position));
 	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, position));
+
+	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, velocity));
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, force));
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, density));
+
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, pressure));
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, force));
+
 	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, dp));
 
 	cl_mem clParticles = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, particleVBO, &status);
 	if (status)printf("positions clmem from VBO %i\n", status);
@@ -424,7 +424,7 @@ int main()
 	double deltaTime = 1.0 / double(fps);
 	double currentFrame = 0.0;
 	glPointSize(5.0f);
-	int frameNumber = 0;
+	int frameNumber = -1;
 	while(!glfwWindowShouldClose(window)) {
 		frameNumber++;
 
@@ -434,7 +434,7 @@ int main()
 		frameCounter++;
 		currentFrame += deltaTime;
 		
-		if (frameNumber > 0) {
+		if (frameNumber == 1) {
 
 			makeKDTree(initialParticles, numberOfPoints, kdConCon);
 

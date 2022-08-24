@@ -190,9 +190,9 @@ __kernel void computeDP(
             }
         }
     }
-    particles[idx].density = newDensity;
+    particles[idx].dp.x = newDensity;
     //printf("idx: %i,density %f\n", idx, newDensity);
-    particles[idx].pressure = GAS_STIFFNESS * (newDensity-REST_DENSITY);
+    particles[idx].dp.y = GAS_STIFFNESS * (newDensity-REST_DENSITY);
 }
 
 __kernel void computeForce(
@@ -223,9 +223,10 @@ __kernel void computeForce(
         float3 theVec = particles[currNode.pointIdx].position.xyz-theBall;
         float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
+            
             float distance = sqrt(dsquared);
-            float pLeftSide = PARTICLE_MASS * ((particles[idx].pressure + particles[currNode.pointIdx].pressure)/(2*particles[currNode.pointIdx].pressure));
-            float3 vLeftSide = PARTICLE_MASS * ((particles[idx].velocity - particles[currNode.pointIdx].velocity).xyz/(particles[currNode.pointIdx].pressure));
+            float pLeftSide = PARTICLE_MASS * ((particles[idx].dp.y + particles[currNode.pointIdx].dp.y)/(2*particles[currNode.pointIdx].dp.y));
+            float3 vLeftSide = PARTICLE_MASS * ((particles[idx].velocity - particles[currNode.pointIdx].velocity).xyz/(particles[currNode.pointIdx].dp.y));
             
             float3 fPressure = fPressure - pLeftSide*deltaWspiky(theVec, distance, h, h6);
             float3 fViscosity = fViscosity + vLeftSide* deltaTwoWviscosity(distance, h, h6);
@@ -280,14 +281,33 @@ __kernel void updateVX(
     
     particles[idx].velocity += particles[idx].force/PARTICLE_MASS;//particles[idx].pressure;
     particles[idx].position = particles[idx].position + (particles[idx].velocity * deltaTime);
-    
-    printf("particle %i moving at %f, %f, %f, at new position %f, %f, %f due to pressure %f and force %f, %f %f\n", 
-    idx,
-    particles[idx].velocity.x, particles[idx].velocity.y, particles[idx].velocity.z,
-    particles[idx].position.x, particles[idx].position.y, particles[idx].position.z,
-    particles[idx].pressure,
-    particles[idx].force.x, particles[idx].force.y, particles[idx].force.z
-    );
+    //  printf("particle %i at new position %f, %f, %f\n", 
+    // idx,
+    // particles[idx].position.x, particles[idx].position.y, particles[idx].position.z
+    // );
+    // particles[idx].position.x = 10;
+    // particles[idx].position.y = 10;
+    // particles[idx].position.z = 10;
+    // particles[idx].position.w = 10;
+    // particles[idx].velocity.x = 10;
+    // particles[idx].velocity.y = 10;
+    // particles[idx].velocity.z = 10;
+    // particles[idx].velocity.w = 10;
+    // particles[idx].force.x = 10;
+    // particles[idx].force.y = 10;
+    // particles[idx].force.z = 10;
+    // particles[idx].force.w = 10;
+    // particles[idx].density = 10;
+    //particles[idx].pressure = 10;
+    //particles[idx].fillerOne = 10;
+    //particles[idx].fillerTwo = 10;
+    // printf("particle %i moving at %f, %f, %f, at new position %f, %f, %f due to pressure %f and force %f, %f %f\n", 
+    // idx,
+    // particles[idx].velocity.x, particles[idx].velocity.y, particles[idx].velocity.z,
+    // particles[idx].position.x, particles[idx].position.y, particles[idx].position.z,
+    // particles[idx].pressure,
+    // particles[idx].force.x, particles[idx].force.y, particles[idx].force.z
+    // );
     // particles[idx].position = min(particles[idx].position, (float4)(9, 9, 9, 0));
     // particles[idx].position = max(particles[idx].position, (float4)(1, 1, 1, 0));
 
