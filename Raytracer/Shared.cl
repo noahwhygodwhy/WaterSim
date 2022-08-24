@@ -36,6 +36,7 @@ STRUCT_HEADER KDNode {
 STRUCT_HEADER Particle {
     float4 position;
     float4 velocity;
+    float4 force;
     float density;
     float pressure;
 };

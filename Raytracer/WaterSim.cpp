@@ -57,28 +57,6 @@ void GLAPIENTRY MessageCallback(GLenum source,
 		(type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
 		type, severity, message);
 }
-//
-//void initOpenGL(GLFWwindow* window) {
-//	glfwInit();
-//	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-//	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-//	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-//	glfwWindowHint(GLFW_SAMPLES, 16);
-//	window = glfwCreateWindow(GLsizei(frameX), GLsizei(frameY), "Renderer", NULL, NULL);
-//	if (window == NULL)
-//	{
-//		cout << "Window creation failed" << endl;
-//		exit(-1);
-//	}
-//	glfwMakeContextCurrent(window);
-//
-//	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-//	{
-//		cout << "GLAD init failed" << endl;
-//		exit(-1);
-//	}
-//	frameBufferSizeCallback(window, frameX, frameY);
-//}
 
 void initOpenCL(cl_context& clContext, cl_device_id& device, GLFWwindow* window) {
 
@@ -210,6 +188,7 @@ int main()
 		initialParticles[numberOfPoints] = Particle(
 			fvec4(xR, yR, zR, 0),
 			fvec4(0),
+			fvec4(0),
 			0.0f,
 			0.0f
 		);
@@ -233,9 +212,11 @@ int main()
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, velocity));
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, density));
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, force));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, density));
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, pressure));
+	glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)offsetof(Particle, pressure));
 	glEnableVertexAttribArray(3);
 
 	cl_mem clParticles = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, particleVBO, &status);
@@ -409,14 +390,9 @@ int main()
 	GLuint boxVBO, boxVAO;
 
 
-	//printf("about to pause\n");
-	//cin.get();
-	//printf("paused\n");
-
 	glGenBuffers(1, &boxVBO);
 	glGenVertexArrays(1, &boxVAO);
 	glBindVertexArray(boxVAO);
-	//std::cout << glGenBuffers << std::endl;
 
 	glBindBuffer(GL_ARRAY_BUFFER, boxVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(finalBoxData), finalBoxData, GL_STATIC_DRAW);
@@ -432,15 +408,6 @@ int main()
 
 
 
-
-
-	//printf("about to pause\n");
-	//cin.get();
-	//printf("paused\n");
-
-
-	//fvec4* readInPositions = new fvec4[numberOfBalls]();
-
 	int fps = 30;
 
 	double deltaTime = 1.0 / double(fps);
@@ -453,127 +420,19 @@ int main()
 
 		frameCounter++;
 		currentFrame += deltaTime;
-		//double currentFrame = glfwGetTime();
-		//deltaTime = currentFrame - lastFrame;
-		//lastFrame = currentFrame;
-		//printf("delta time: %f\n", deltaTime);
-
-		/*if (int(currentFrame) > lastSecondFrameCount) {
-			lastSecondFrameCount = int(currentFrame);
-			float sum = 0;
-			for (float f : frameTimes) {
-				sum += f;
-			}
-			printf("fps: ~%f\n", sum / 30.0f);
-		}
-		frameTimes[frameCounter % 30] = 1.0f / float(deltaTime);*/
-
-
-		/*glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
-		glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fvec4) * numberOfBalls, readInPositions);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);*/
-
-		//TODO: don't initialize the array each time
-
-
-
-
-
-
-		//printf("43 coords: %s\n", glm::to_string(initialBathPositions[43]).c_str());
+		
 
 		int32_t lookingIndex = 13;
 
 
-
-
-		//int32_t lookingIndex = 2; //is missing 32 with 60 points
-
-		//for (int lookingIndex = 0; lookingIndex < numberOfBalls; lookingIndex++) {
-
-		/*initialParticles[lookingIndex].position.z = boxSize.z-( currentFrame / 2.0f);
-		initialParticles[lookingIndex].position.y = currentFrame / 2.0f;
-		initialParticles[lookingIndex].position.x = currentFrame / 2.0f;*/
-
-		//for (int lookingIndex = 0; lookingIndex < numberOfPoints; lookingIndex++) {
-
-			/*size_t memForTree = size_t(glm::pow(2, glm::ceil(glm::log2(float(numberOfPoints)) + 1))) - 1;
-			KDNode* theTree = new KDNode[memForTree]();*/
-			float theRange = 3.0f;
-			//printf("\n\n");
+		float theRange = 3.0f;
 
 
 
-			makeKDTree(initialParticles, numberOfPoints, kdConCon);
+		makeKDTree(initialParticles, numberOfPoints, kdConCon);
 
-			//status = clEnqueueReadBuffer(*kdConCon.cmdQueue, *kdConCon.clTheTree, CL_TRUE, 0, sizeof(KDNode) * memForTree, theTree, 0, NULL, NULL);
-			//if (status)printf("reading in the tree %i\n", status);
-			//printTree(theTree);
-
-			////cin.get();
-
-
-			////printf("getting dots in range\n");
-			//vector<int32_t> dotsInRange = getDotsInRange(initialParticles, theTree, lookingIndex, 3);
-
-
-
-			//////vector<int32_t> dotsInRangeOld = getDotsInRangeOld(initialParticles, theTree, 2, 3);
-
-
-			//std::sort(dotsInRange.begin(), dotsInRange.end());
-
-			//vector<int32_t> manualClosePoints = vector<int32_t>();
-
-			//fvec3 twentyFourPos = initialParticles[lookingIndex].position.xyz;
-			//printf("looking for index %i: %s\n", lookingIndex, glm::to_string(twentyFourPos).c_str());
-			//printf("missing %i: %s\n", 2, glm::to_string(vec3(initialParticles[2].position.xyz)).c_str());
-			//for (int32_t i = 0; i < numberOfPoints; i++) {
-			//	if (i != lookingIndex) {
-			//		fvec3 otherPos = initialParticles[i].position;
-			//		float d = glm::distance(twentyFourPos, otherPos);
-			//		if (d <= theRange) {
-			//			manualClosePoints.push_back(i);
-			//		}
-			//	}
-			//}
-
-			//std::sort(manualClosePoints.begin(), manualClosePoints.end());
 		
-			//if (dotsInRange.size() != manualClosePoints.size()) {
 
-			//	printf("dotsInRangeSize: %zu\n", dotsInRange.size());
-			//	printf("dotsInRangeManual: %zu\n", manualClosePoints.size());
-
-			//	printf("cpu getdotsinrange:\n");
-			//	for (auto i : dotsInRange) {
-			//		printf("%i, ", i);
-			//	}
-			//	printf("\n");
-			//	printf("manual:\n");
-			//	for (auto i : manualClosePoints) {
-			//		printf("%i, ", i);
-			//	}
-			//	printf("\n");
-
-
-
-			//	cin.get();
-			//}
-			//else {
-			//	printf("we good\n");
-			//}
-
-		//}
-		//cin.get();
-
-
-		//printTree(theTree);
-
-
-		//printf("\n");
-		////printTree(theTree);
-		//cin.get();
 
 		float floatDeltaTime = float(deltaTime);
 
@@ -581,152 +440,13 @@ int main()
 		if (status)printf("dp kernel 2 %i\n", status);
 		status = clSetKernelArg(computeDPKernel, 1, sizeof(cl_mem), &clTheTree);
 		if (status)printf("dp kernel 1 %i\n", status);
-		//printf("set arg 2 status: %i\n", status);
 
-		//printf("\n\ngetting dots in range on GPU\n");
 		size_t globalWorkSize[3] = {numberOfPoints, 1, 1 };
 		cl_event* kernelEvent = new cl_event();
 		status = clEnqueueNDRangeKernel(cmdQueue, computeDPKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
 		if (status)printf("cd kernel execution %i\n", status);
 		clWaitForEvents(1, kernelEvent);
 		clFinish(*kdConCon.cmdQueue);
-
-		//cin.get();
-
-
-
-		//printf("\n\n");
-		//printTree(theTree);
-		//cin.get();
-		//printf("\n\n");
-		//cin.get();
-		//vector<int32_t> listOfClosePoints = getDotsInRange(initialParticles, theTree, lookingIndex, theRange);
-		//vector<int32_t> listOfClosePoints = vector<int32_t>();
-		//vector<int32_t> manualClosePoints = vector<int32_t>();
-
-		//fvec3 twentyFourPos = initialParticles[lookingIndex].position.xyz;
-		//for (int32_t i = 0; i < numberOfBalls; i++) {
-		//	if (i != lookingIndex) {
-		//		fvec3 otherPos = initialParticles[i].position;
-		//		float d = glm::distance(twentyFourPos, otherPos);
-		//		if (d <= theRange) {
-		//			manualClosePoints.push_back(i);
-		//		}
-		//	}
-		//}
-
-		////std::sort(listOfClosePoints.begin(), listOfClosePoints.end());
-		////std::sort(manualClosePoints.begin(), manualClosePoints.end());
-
-		//if (manualClosePoints.size() != listOfClosePoints.size()) {
-
-		//	printf("manual neighbors:%zu\n", manualClosePoints.size());
-		//	printf("auto neighbors: %zu\n", listOfClosePoints.size());
-		//	cin.get();
-		//}
-
-		/*for (auto k : manualClosePoints) {
-			printf("%i, ", k);
-		}
-		printf("\n");*/
-		/*for (auto k : listOfClosePoints) {
-			printf("%i, ", k);
-		}
-		printf("\n");*/
-
-		//cin.get();
-		/*if (listOfClosePoints.size() != manualClosePoints.size()) {
-			printf("nots ame size");
-			for (uint asdf = 0; asdf < manualClosePoints.size(); asdf++) {
-				if (listOfClosePoints[asdf] != manualClosePoints[asdf]) {
-					printf("looking index: %i\n", lookingIndex);
-					printf("kdneighbors:\n");
-					for (auto k : listOfClosePoints) {
-						printf("%i, ", k);
-					}
-					printf("\n");
-					printf("bruteforce:\n");
-					for (auto k : manualClosePoints) {
-						printf("%i, ", k);
-					}
-					printf("\n");
-				}
-			}
-			cin.get();
-		}*/
-
-		//}
-
-
-
-
-
-
-		/*printf("kdneighbors:\n");
-		for (auto k : listOfClosePoints) {
-			printf("%i, ", k);
-		}
-		printf("\n");
-		printf("bruteforce:\n");
-		for (auto k : manualClosePoints) {
-			printf("%i, ", k);
-		}
-		printf("\n");*/
-
-
-
-		/*for (int32_t i = 0; i < numberOfBalls; i++) {
-			initialParticles[i].velocity = fvec3(0, 0, 1);
-
-		}
-
-		for (int32_t k : listOfClosePoints) {
-
-			initialParticles[k].velocity = fvec3(1, 0, 1);
-		}
-		initialParticles[lookingIndex].velocity = fvec3(0, 1, 0);*/
-
-		//initialBathPositions[32].w = 0.4f;
-
-
-		/*glBindVertexArray(particleVAO);
-		glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(Particle)* MAX_PARTICLES, initialParticles, GL_STATIC_DRAW);
-
-		glBindVertexArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);*/
-		//printTree(theTree);
-
-
-
-		////set the frame counter argument
-		//status = clSetKernelArg(waterSimKernel, 7, sizeof(cl_uint), &frameCounter);
-		//printf("set arg 7 status: %i\n", status);
-		//
-		//status = clEnqueueWriteBuffer(cmdQueue, clToneMapData, CL_TRUE, 0, sizeof(ToneMapStruct), &toneMapData, 0, NULL,NULL);
-		//printf("write tonemap status: %i\n", status);
-
-
-
-
-
-		//cl_int fc = frameCounter;
-		//status = clSetKernelArg(waterSimKernel, 2, sizeof(cl_int), &fc);
-
-
-
-		//cl_event* firstPassEvent = new cl_event();
-		//status = clEnqueueNDRangeKernel(cmdQueue, waterSimKernel, 2, NULL, globalWorkSize, NULL, 0, NULL, firstPassEvent);
-		//if(status != 0)printf("range kernel: %i\n", status);
-		//clWaitForEvents(1, firstPassEvent);
-		//cl_event* secondPassEvent = new cl_event();
-		//status = clEnqueueNDRangeKernel(cmdQueue, renderKernel, 2, NULL, globalWorkSize, NULL, 0, NULL, secondPassEvent);
-		//if (status != 0)printf("range kernel: %i\n", status);
-		//clWaitForEvents(1, secondPassEvent);w
-
-		//clFinish(cmdQueue);
-
-		//draw it to the glfw window
 
 
 		vec3 eye = vec3(sin(currentFrame/2.0f) * boxSize.x, boxSize.y/2.0f, cos(currentFrame/2.0f) * boxSize.z) + (boxSize/2.0f);
