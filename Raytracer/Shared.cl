@@ -15,9 +15,10 @@
     using namespace glm;
     typedef vec4 float4;
     typedef vec3 float3;
+
     #define STRUCT_HEADER typedef struct alignas(16)
 #else
-    #define STRUCT_HEADER typedef struct
+    #define STRUCT_HEADER typedef struct 
 #endif
 
 
@@ -38,7 +39,7 @@ STRUCT_HEADER Particle {
     float4 position;
     float4 velocity;
     float4 force;
-    float4 dp;
+    float4 dp; //density is the first, pressure is the second, and the other two are just filler
 } Particle;
 
 

@@ -32,9 +32,8 @@ double deltaTime = 0.0f;	// Time between current frame and last frame
 double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
-constexpr double bias = 1e-4;
-constexpr uint32_t MAX_PARTICLES = 1000;
-//constexpr uint32_t KD_MAX_LAYERS = 20;
+//constexpr double bias = 1e-4;
+constexpr uint32_t MAX_PARTICLES = 2000;
 
 
 void frameBufferSizeCallback(GLFWwindow* window, uint64_t width, uint64_t height) {
@@ -101,6 +100,8 @@ void initOpenCL(cl_context& clContext, cl_device_id& device, GLFWwindow* window)
 
 	
 }
+
+
 int main()
 {
 	srand(0u);
@@ -164,21 +165,11 @@ int main()
 	cl_mem clTotalList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_PARTICLES, NULL, &status);
 	cl_mem clNodeIndexList = clCreateBuffer(clContext, CL_MEM_READ_WRITE, sizeof(int32_t) * MAX_PARTICLES, NULL, &status);
 
+
+
 	uint32_t numberOfPoints = 0;
 
-
-
-	ivec3 counts = boxSize / (ballRad * 2);
-
-	//printf("%i, %i, %i\n", counts.x, counts.y, counts.z);
-
-	/*for (int i = 0; i < 1000; i++) {
-		float x = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX));
-		printf("%f\n", x);
-	}
-	exit(1);*/
-
-
+	//initialize points
 	for (int i = 0; i < MAX_PARTICLES; i++) {
 		float xR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.x;
 		float yR = (static_cast <float> (rand()) / static_cast <float> (RAND_MAX)) * boxSize.y;
@@ -198,6 +189,7 @@ int main()
 
 
 
+//opengl buffers for the particles
 	GLuint particleVBO, particleVAO;
 	glGenVertexArrays(1, &particleVAO);
 	glBindVertexArray(particleVAO);
@@ -205,18 +197,17 @@ int main()
 	glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * MAX_PARTICLES, initialParticles, GL_STATIC_DRAW);
 
-
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, position));
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, position));
 
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, velocity));
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, velocity));
 
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, force));
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, force));
 
 	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void*)offsetof(Particle, dp));
+	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, dp));
 
 	cl_mem clParticles = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, particleVBO, &status);
 	if (status)printf("positions clmem from VBO %i\n", status);
@@ -229,7 +220,7 @@ int main()
 
 
 
-//read in opencl program and compile
+	//read in opencl program and compile
 	long unsigned int length;
 	ifstream stream("WaterSim.cl", ios::in | ios::ate | ios::binary);
 	//stream.seekg(0, ios::end);
@@ -262,7 +253,7 @@ int main()
 
 
 
-//create the kernels and set memory arguments
+//create the kernels
 	cl_kernel bitonicSortKernel = clCreateKernel(program, "bitonicSort", &status);
 	if (status)printf("bitonic sort kernel %i\n", status);
 	cl_kernel computeDPKernel = clCreateKernel(program, "computeDP", &status);
@@ -275,7 +266,7 @@ int main()
 	if (status)printf("kdtreekernel %i\n", status);
 
 
-
+	//ignore this lol
 	KDConstructionContext kdConCon(
 		initialParticles,
 		numberOfPoints,
@@ -290,7 +281,7 @@ int main()
 	);
 
 
-
+	//set all of the kernel point that don't change change frame to frame
 	status = clSetKernelArg(computeDPKernel, 0, sizeof(cl_mem), &clParticles);
 	if (status)printf("dp kernel 0 %i\n", status);
 	status = clSetKernelArg(computeDPKernel, 1, sizeof(cl_mem), &clTheTree);
@@ -306,8 +297,12 @@ int main()
 
 	status = clSetKernelArg(*kdConCon.kdTreeKernel, 0, sizeof(cl_mem), &clParticles);
 	if (status)printf("kd kernel 0 %i\n", status);
+	status = clSetKernelArg(*kdConCon.kdTreeKernel, 1, sizeof(cl_mem), &clTotalList);
+	if (status)printf("kd kernel 1 %i\n", status);
 	status = clSetKernelArg(*kdConCon.kdTreeKernel, 2, sizeof(cl_mem), &clTheTree);
 	if (status)printf("kd kernel 2 %i\n", status);
+	status = clSetKernelArg(*kdConCon.kdTreeKernel, 5, sizeof(int), &numberOfPoints);
+	if (status)printf("kd kernel 5 %i\n", status);
 	status = clSetKernelArg(*kdConCon.kdTreeKernel, 6, sizeof(cl_mem), &clNodeIndexList);
 	if (status)printf("kd kernel 6 %i\n", status);
 
@@ -319,9 +314,8 @@ int main()
 	if (status)printf("bitonic kernel 0 %i\n", status);
 
 
-	size_t globalWorkSize[3] = { MAX_PARTICLES, 1, 1 };
-	size_t localWorkSize[3] = { NULL, NULL, NULL };
 
+//creation of 
 	Shader boxShader("boxVert.glsl", "boxFrag.glsl");
 	Shader waterShader("waterVert.glsl", "waterFrag.glsl");
 
@@ -332,14 +326,14 @@ int main()
 
 
 
-	status = clEnqueueWriteBuffer(cmdQueue, clParticles, CL_TRUE, 0, sizeof(Particle) * MAX_PARTICLES, initialParticles, 0, NULL, NULL);
-	if (status)printf("write initial particles %i\n", status);
+	/*status = clEnqueueWriteBuffer(cmdQueue, clParticles, CL_TRUE, 0, sizeof(Particle) * MAX_PARTICLES, initialParticles, 0, NULL, NULL);
+	if (status)printf("write initial particles %i\n", status);*/
 	
 	
 
 
 
-
+	//a cube from 0,0,0 to 1,1,1
 	fvec3 finalBoxData[72] = {
 		vec3(0.000000, 1.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
 		vec3(0.000000, 0.000000, 0.000000), vec3(0.000000, 0.000000, 1.000000),
@@ -389,7 +383,7 @@ int main()
 		vec3(1.000000, 1.000000, 0.000000), vec3(0.000000, -1.000000, 0.000000),
 		vec3(1.000000, 1.000000, 1.000000), vec3(0.000000, -1.000000, 0.000000)
 	};
-
+	//scale it
 	for (int i = 0; i < 72; i+=2) {
 		finalBoxData[i] = finalBoxData[i] * boxSize;
 	}
@@ -397,7 +391,7 @@ int main()
 
 
 
-
+	//box buffer stuff
 	GLuint boxVBO, boxVAO;
 
 
@@ -425,6 +419,7 @@ int main()
 	double currentFrame = 0.0;
 	glPointSize(5.0f);
 	int frameNumber = -1;
+
 	while(!glfwWindowShouldClose(window)) {
 		frameNumber++;
 
@@ -436,26 +431,29 @@ int main()
 		
 		if (frameNumber == 1) {
 
+			//makes the tree, stored in clTheTree
 			makeKDTree(initialParticles, numberOfPoints, kdConCon);
 
 			float floatDeltaTime = float(deltaTime);
 
-			printf("frame number: %i\n", frameNumber);
-			status = clSetKernelArg(computeDPKernel, 2, sizeof(int), &frameNumber);
-			if (status)printf("vx kernel 1 %i\n", status);
+			//printf("frame number: %i\n", frameNumber);
 
 			size_t globalWorkSize[3] = { numberOfPoints, 1, 1 };
 			cl_event* kernelEvent = new cl_event();
+
+			//compute density and pressure
 			status = clEnqueueNDRangeKernel(cmdQueue, computeDPKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
 			if (status)printf("cd kernel execution %i\n", status);
 			clWaitForEvents(1, kernelEvent);
 			clFinish(*kdConCon.cmdQueue);
 
+			//compute forces from said pressure
 			status = clEnqueueNDRangeKernel(cmdQueue, computeForceKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
 			if (status)printf("cd kernel execution %i\n", status);
 			clWaitForEvents(1, kernelEvent);
 			clFinish(*kdConCon.cmdQueue);
-
+			
+			//add velocity and move particles
 			status = clSetKernelArg(updateVXKernel, 1, sizeof(float), &floatDeltaTime);
 			if (status)printf("vx kernel 1 %i\n", status);
 			status = clEnqueueNDRangeKernel(cmdQueue, updateVXKernel, 1, NULL, globalWorkSize, NULL, 0, NULL, kernelEvent);
@@ -464,15 +462,15 @@ int main()
 			clFinish(*kdConCon.cmdQueue);
 		}
 
-		vec3 eye = vec3(sin(currentFrame/2.0f) * boxSize.x, boxSize.y/2.0f, cos(currentFrame/2.0f) * boxSize.z) + (boxSize/2.0f);
 
+
+	//actually draw everything
+		vec3 eye = vec3(sin(currentFrame/2.0f) * boxSize.x, boxSize.y/2.0f, cos(currentFrame/2.0f) * boxSize.z) + (boxSize/2.0f);
 		//eye = vec3(boxSize.x, boxSize.y / 2.0f, boxSize.z) + (boxSize / 2.0f);
 
 
 		vec3 at(boxSize/2.0f);
-
 		mat4 view = glm::lookAt(eye, at, vec3(0, 1, 0));
-
 		mat4 proj = glm::perspective(glm::radians(70.0f), float(frameRatio), 0.1f, 200.0f);
 
 		glEnable(GL_DEPTH_TEST);

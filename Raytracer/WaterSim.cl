@@ -13,13 +13,15 @@
 // __constant float3 GRAVITY = (float3)(0, -0.1f, 0);
 // __constant float PARTICLE_MASS = 1.0f;
 
-//tweaked
+
 __constant float NEIGHBOR_RADIUS = 1.0f;
 __constant float REST_DENSITY = 1.0f;
 __constant float GAS_STIFFNESS = 1.0f;
 __constant float3 GRAVITY = (float3)(0, 0.0f, 0);
 __constant float PARTICLE_MASS = 1.0f;
 
+
+//dont' judge, opencl doesn't allow for float3[#]
 float indexF3(float3 a, int index) {
     switch (index) {
     case 0:
@@ -47,11 +49,6 @@ float vector_length_2(float3 c) {
     return (c.x * c.x) + (c.y * c.y) + (c.z * c.z);
 }
 
-void gSwap(__global unsigned int *a, __global unsigned int *b) {
-  unsigned int t = *a;
-  *a = *b;
-  *b = t;
-}
 
 uint nextPowerOfTwo(uint x) {
     x -= 1;
@@ -67,10 +64,7 @@ uint nextPowerOfTwo(uint x) {
 
 
 
-//this bitonic sort was essentially written by riley broderick
-//I tried but god damn I could not get it to function
-//although to be fair, he claimed ignorance to how it works as well
-//just that it he was able to get it working
+//this bitonic sort was written by riley broderick
 __kernel void bitonicSort(
     __global struct Particle *particles,
     __global unsigned int *totalList,
@@ -128,11 +122,10 @@ float deltaTwoWviscosity(float r, float h, float h6) {
 
 
 
-
+//computes density and pressure from surrounding points
 __kernel void computeDP(
     __global struct Particle *particles,
-    __global struct KDNode *theTree,
-    int frameNumber) {
+    __global struct KDNode *theTree) {
 
     int idx = get_global_id(0);
 
@@ -156,10 +149,11 @@ __kernel void computeDP(
         float3 theVec = particles[currNode.pointIdx].position.xyz-theBall;
         float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
+            ////////////////////////////////////////////////////////////////////////////////////////////
+                //this is where it's actually found a close point, and does stuff with it
+            ////////////////////////////////////////////////////////////////////////////////////////////
             float distance = sqrt(dsquared);
             newDensity += PARTICLE_MASS* Wpoly6(distance, h2, h9);
-            
-            //particles[currNode.pointIdx].velocity = (float4)(1.0, 1.0, 0.0, 0.0);// * (distance/NEIGHBOR_RADIUS); // temp
         }
 
         float val = indexF3(theBall, axis);
@@ -190,10 +184,11 @@ __kernel void computeDP(
             }
         }
     }
+
     particles[idx].dp.x = newDensity;
-    //printf("idx: %i,density %f\n", idx, newDensity);
     particles[idx].dp.y = GAS_STIFFNESS * (newDensity-REST_DENSITY);
 }
+
 
 __kernel void computeForce(
     __global struct Particle *particles,
@@ -223,15 +218,15 @@ __kernel void computeForce(
         float3 theVec = particles[currNode.pointIdx].position.xyz-theBall;
         float dsquared = vector_length_2(theVec);
         if ((dsquared <= h2) && (currNode.pointIdx != idx) && !lastParent) {
-            
+            ////////////////////////////////////////////////////////////////////////////////////////////
+                //this is where it's actually found a close point, and does stuff with it
+            ////////////////////////////////////////////////////////////////////////////////////////////
             float distance = sqrt(dsquared);
             float pLeftSide = PARTICLE_MASS * ((particles[idx].dp.y + particles[currNode.pointIdx].dp.y)/(2*particles[currNode.pointIdx].dp.y));
             float3 vLeftSide = PARTICLE_MASS * ((particles[idx].velocity - particles[currNode.pointIdx].velocity).xyz/(particles[currNode.pointIdx].dp.y));
             
             float3 fPressure = fPressure - pLeftSide*deltaWspiky(theVec, distance, h, h6);
             float3 fViscosity = fViscosity + vLeftSide* deltaTwoWviscosity(distance, h, h6);
-
-            //float deltaTwoWviscosity(float4 theVec, float r, float h, float h6) {
             //TODO: the force things on page 35 of https://www.diva-portal.org/smash/get/diva2:703754/FULLTEXT01.pdf
         }
 
@@ -265,42 +260,49 @@ __kernel void computeForce(
     }
     //f=m*a
     float3 fGravity = GRAVITY * PARTICLE_MASS;
-    //particles[idx].force = (float4)(0 + 0 + fGravity, 0);
-    //printf("updated force of %i: %f, %f, %f\n",idx, fGravity.x, fGravity.y, fGravity.z);
     particles[idx].force = (float4)(fPressure + fViscosity + fGravity, 0);
 
 }
 
+//update velocity and position
 __kernel void updateVX(
     __global struct Particle *particles,
     float deltaTime
 ){
     int idx = get_global_id(0);
-    //if(idx == 0){printf("delta time %f\n", deltaTime);}
 
     
-    particles[idx].velocity += particles[idx].force/PARTICLE_MASS;//particles[idx].pressure;
-    particles[idx].position = particles[idx].position + (particles[idx].velocity * deltaTime);
+    //particles[idx].velocity += particles[idx].force/PARTICLE_MASS;//particles[idx].pressure;
+    //particles[idx].position = particles[idx].position + (particles[idx].velocity * deltaTime);
     //  printf("particle %i at new position %f, %f, %f\n", 
     // idx,
     // particles[idx].position.x, particles[idx].position.y, particles[idx].position.z
     // );
+    // Particle x = particles[idx];
+    // x.position = (float4)(10, 10, 10, 0);
+    // particles[idx] = x;
+    //printf("%i\n", sizeof(Particle));
+    //float4 x = (float4)(10, 10, 10, 0);
+    
+
     // particles[idx].position.x = 10;
     // particles[idx].position.y = 10;
     // particles[idx].position.z = 10;
-    // particles[idx].position.w = 10;
-    // particles[idx].velocity.x = 10;
-    // particles[idx].velocity.y = 10;
-    // particles[idx].velocity.z = 10;
-    // particles[idx].velocity.w = 10;
-    // particles[idx].force.x = 10;
-    // particles[idx].force.y = 10;
-    // particles[idx].force.z = 10;
-    // particles[idx].force.w = 10;
-    // particles[idx].density = 10;
-    //particles[idx].pressure = 10;
-    //particles[idx].fillerOne = 10;
-    //particles[idx].fillerTwo = 10;
+
+    // particles[idx].position.w = 0;
+    // particles[idx].velocity.x = 0;
+    // particles[idx].velocity.y = 0;
+    // particles[idx].velocity.z = 0;
+    // particles[idx].velocity.w = 0;
+    // particles[idx].force.x = 0;
+    // particles[idx].force.y = 0;
+    // particles[idx].force.z = 0;
+    // particles[idx].force.w = 0;
+    // particles[idx].dp.x = 0;
+    // particles[idx].dp.y = 0;
+    // particles[idx].dp.z = 0;
+    // particles[idx].dp.w = 0;
+
     // printf("particle %i moving at %f, %f, %f, at new position %f, %f, %f due to pressure %f and force %f, %f %f\n", 
     // idx,
     // particles[idx].velocity.x, particles[idx].velocity.y, particles[idx].velocity.z,
@@ -308,11 +310,15 @@ __kernel void updateVX(
     // particles[idx].pressure,
     // particles[idx].force.x, particles[idx].force.y, particles[idx].force.z
     // );
-    // particles[idx].position = min(particles[idx].position, (float4)(9, 9, 9, 0));
-    // particles[idx].position = max(particles[idx].position, (float4)(1, 1, 1, 0));
+    
+    
+    particles[idx].position = min(particles[idx].position, (float4)(9, 9, 9, 0));
+    particles[idx].position = max(particles[idx].position, (float4)(1, 1, 1, 0));
 
 }
 
+
+//construct the kd tree
 __kernel void makeKDTree(__global struct Particle *particles,
                          __global unsigned int *totalList,
                          __global struct KDNode *theTree, 
@@ -366,14 +372,14 @@ __kernel void makeKDTree(__global struct Particle *particles,
     theTree[treeIdx - 1] = nodeToAdd;
 
     
-    if(false)printf("\nidx: %i, treeIdx: %i\nstartingIdx %i, middleIdx: %i, endingIdx: %i\nhG %i, nG %i, hL %i, nL %i\ninput: %i, %i, %i, output: %i, %i, %i | %i, %i, %i\n", 
-        idx, treeIdx, 
-        startingIdx, middleIdx, endingIdx, 
-        hasGreater, noGreater, hasLesser, noLesser,
-        input[idx].x, input[idx].y, input[idx].z,
-        output[idx * 2].x, output[idx * 2].y, output[idx * 2].z,
-        output[(idx * 2) + 1].x, output[(idx * 2) + 1].y, output[(idx * 2) + 1].z
-    );
+    // if(false)printf("\nidx: %i, treeIdx: %i\nstartingIdx %i, middleIdx: %i, endingIdx: %i\nhG %i, nG %i, hL %i, nL %i\ninput: %i, %i, %i, output: %i, %i, %i | %i, %i, %i\n", 
+    //     idx, treeIdx, 
+    //     startingIdx, middleIdx, endingIdx, 
+    //     hasGreater, noGreater, hasLesser, noLesser,
+    //     input[idx].x, input[idx].y, input[idx].z,
+    //     output[idx * 2].x, output[idx * 2].y, output[idx * 2].z,
+    //     output[(idx * 2) + 1].x, output[(idx * 2) + 1].y, output[(idx * 2) + 1].z
+    // );
 
 }
 
