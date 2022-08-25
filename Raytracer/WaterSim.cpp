@@ -32,7 +32,7 @@ double deltaTime = 0.0f;	// Time between current frame and last frame
 double lastFrame = 0.0f; // Time of last frame
 string saveFileDirectory = "";
 
-//constexpr double bias = 1e-4;
+constexpr double bias = 1e-4;
 constexpr uint32_t MAX_PARTICLES = 2000;
 
 
@@ -198,21 +198,19 @@ int main()
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * MAX_PARTICLES, initialParticles, GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, position));
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, position));
 
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, velocity));
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, velocity));
 
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, force));
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, force));
 
 	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)offsetof(Particle, dp));
+	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, dp));
 
 	cl_mem clParticles = clCreateFromGLBuffer(clContext, CL_MEM_READ_WRITE, particleVBO, &status);
 	if (status)printf("positions clmem from VBO %i\n", status);
-	status = clEnqueueAcquireGLObjects(cmdQueue, 1, &clParticles, 0, NULL, NULL);
-	if (status)printf("aquire gl objects %i\n", status);
 
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -428,8 +426,10 @@ int main()
 
 		frameCounter++;
 		currentFrame += deltaTime;
-		
-		if (frameNumber == 1) {
+
+		status = clEnqueueAcquireGLObjects(cmdQueue, 1, &clParticles, 0, NULL, NULL);
+		if (status)printf("aquire gl objects %i\n", status);
+		if (frameNumber > 0) {
 
 			//makes the tree, stored in clTheTree
 			makeKDTree(initialParticles, numberOfPoints, kdConCon);
@@ -461,7 +461,9 @@ int main()
 			clWaitForEvents(1, kernelEvent);
 			clFinish(*kdConCon.cmdQueue);
 		}
-
+		
+		status = clEnqueueReleaseGLObjects(cmdQueue, 1, &clParticles, 0, NULL, NULL);
+		if (status)printf("aquire gl objects %i\n", status);
 
 
 	//actually draw everything

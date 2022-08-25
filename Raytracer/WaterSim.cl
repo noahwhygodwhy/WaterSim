@@ -15,10 +15,10 @@
 
 
 __constant float NEIGHBOR_RADIUS = 1.0f;
-__constant float REST_DENSITY = 1.0f;
-__constant float GAS_STIFFNESS = 1.0f;
-__constant float3 GRAVITY = (float3)(0, 0.0f, 0);
-__constant float PARTICLE_MASS = 1.0f;
+__constant float REST_DENSITY = 1000.0f;
+__constant float GAS_STIFFNESS = 3.0f;
+__constant float3 GRAVITY = (float3)(0, -1.0f, 0);
+__constant float PARTICLE_MASS = 4000.0f;
 
 
 //dont' judge, opencl doesn't allow for float3[#]
@@ -184,9 +184,11 @@ __kernel void computeDP(
             }
         }
     }
-
     particles[idx].dp.x = newDensity;
     particles[idx].dp.y = GAS_STIFFNESS * (newDensity-REST_DENSITY);
+    // if(idx < 100) {
+    //     printf("idx: %i, density: %f, pressure: %f\n", idx, newDensity, particles[idx].dp.y);
+    // }
 }
 
 
@@ -225,8 +227,11 @@ __kernel void computeForce(
             float pLeftSide = PARTICLE_MASS * ((particles[idx].dp.y + particles[currNode.pointIdx].dp.y)/(2*particles[currNode.pointIdx].dp.y));
             float3 vLeftSide = PARTICLE_MASS * ((particles[idx].velocity - particles[currNode.pointIdx].velocity).xyz/(particles[currNode.pointIdx].dp.y));
             
-            float3 fPressure = fPressure - pLeftSide*deltaWspiky(theVec, distance, h, h6);
-            float3 fViscosity = fViscosity + vLeftSide* deltaTwoWviscosity(distance, h, h6);
+            float3 fPressure = fPressure - (pLeftSide*deltaWspiky(theVec, distance, h, h6));
+            float3 fViscosity = fViscosity + (vLeftSide* deltaTwoWviscosity(distance, h, h6));
+            if(idx == 0) {
+                printf("%i had a density of %f which lead to a left side of %f which adds to %f, %f, %f, distance is %f, h is %f, h6 is %f\n",idx, particles[idx].dp.y, pLeftSide, fPressure.x, fPressure.y, fPressure.z, distance, h, h6);
+            }
             //TODO: the force things on page 35 of https://www.diva-portal.org/smash/get/diva2:703754/FULLTEXT01.pdf
         }
 
@@ -261,6 +266,9 @@ __kernel void computeForce(
     //f=m*a
     float3 fGravity = GRAVITY * PARTICLE_MASS;
     particles[idx].force = (float4)(fPressure + fViscosity + fGravity, 0);
+    // if(idx < 100) {
+    //     printf("idx: %i, force: %f, %f, %f\n", idx, particles[idx].force.x, particles[idx].force.y, particles[idx].force.z);
+    // }
 
 }
 
@@ -272,8 +280,9 @@ __kernel void updateVX(
     int idx = get_global_id(0);
 
     
-    //particles[idx].velocity += particles[idx].force/PARTICLE_MASS;//particles[idx].pressure;
-    //particles[idx].position = particles[idx].position + (particles[idx].velocity * deltaTime);
+    particles[idx].velocity += particles[idx].force/PARTICLE_MASS;//particles[idx].pressure;
+    particles[idx].position = particles[idx].position + (particles[idx].velocity * deltaTime);
+    
     //  printf("particle %i at new position %f, %f, %f\n", 
     // idx,
     // particles[idx].position.x, particles[idx].position.y, particles[idx].position.z
@@ -312,8 +321,8 @@ __kernel void updateVX(
     // );
     
     
-    particles[idx].position = min(particles[idx].position, (float4)(9, 9, 9, 0));
-    particles[idx].position = max(particles[idx].position, (float4)(1, 1, 1, 0));
+    particles[idx].position = min(particles[idx].position, (float4)(10, 10, 10, 0));
+    particles[idx].position = max(particles[idx].position, (float4)(0, 0, 0, 0));
 
 }
 
